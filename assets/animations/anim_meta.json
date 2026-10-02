@@ -1,0 +1,164 @@
+{
+  "Guard": {
+    "file": "assets/animations/guard_actions.png",
+    "cellW": 420,
+    "cellH": 430,
+    "rows": {
+      "idle": 0,
+      "walk": 1,
+      "attack": 2,
+      "hurt": 3,
+      "dead": 4
+    },
+    "frames": {
+      "idle": 1,
+      "walk": 5,
+      "attack": 3,
+      "hurt": 1,
+      "dead": 1
+    },
+    "fps": {
+      "idle": 1.8,
+      "walk": 7.5,
+      "attack": 11,
+      "hurt": 8,
+      "dead": 5
+    },
+    "scale": 0.96
+  },
+  "Archer": {
+    "file": "assets/animations/archer_actions.png",
+    "cellW": 420,
+    "cellH": 430,
+    "rows": {
+      "idle": 0,
+      "walk": 1,
+      "attack": 2,
+      "hurt": 3,
+      "dead": 4
+    },
+    "frames": {
+      "idle": 1,
+      "walk": 4,
+      "attack": 3,
+      "hurt": 1,
+      "dead": 1
+    },
+    "fps": {
+      "idle": 1.8,
+      "walk": 7.5,
+      "attack": 11,
+      "hurt": 8,
+      "dead": 5
+    },
+    "scale": 0.98
+  },
+  "Engineer": {
+    "file": "assets/animations/engineer_actions.png",
+    "cellW": 420,
+    "cellH": 430,
+    "rows": {
+      "idle": 0,
+      "walk": 1,
+      "attack": 2,
+      "hurt": 3,
+      "dead": 4
+    },
+    "frames": {
+      "idle": 1,
+      "walk": 4,
+      "attack": 2,
+      "hurt": 1,
+      "dead": 1
+    },
+    "fps": {
+      "idle": 1.8,
+      "walk": 7.5,
+      "attack": 11,
+      "hurt": 8,
+      "dead": 5
+    },
+    "scale": 0.95
+  },
+  "Brute": {
+    "file": "assets/animations/brute_actions.png",
+    "cellW": 420,
+    "cellH": 430,
+    "rows": {
+      "idle": 0,
+      "walk": 1,
+      "attack": 2,
+      "hurt": 3,
+      "dead": 4
+    },
+    "frames": {
+      "idle": 1,
+      "walk": 4,
+      "attack": 3,
+      "hurt": 1,
+      "dead": 1
+    },
+    "fps": {
+      "idle": 1.8,
+      "walk": 7.5,
+      "attack": 11,
+      "hurt": 8,
+      "dead": 5
+    },
+    "scale": 1.12
+  },
+  "Grunt": {
+    "file": "assets/animations/grunt_actions.png",
+    "cellW": 420,
+    "cellH": 430,
+    "rows": {
+      "idle": 0,
+      "walk": 1,
+      "attack": 2,
+      "hurt": 3,
+      "dead": 4
+    },
+    "frames": {
+      "idle": 1,
+      "walk": 5,
+      "attack": 2,
+      "hurt": 1,
+      "dead": 1
+    },
+    "fps": {
+      "idle": 1.8,
+      "walk": 7.5,
+      "attack": 11,
+      "hurt": 8,
+      "dead": 5
+    },
+    "scale": 0.92
+  },
+  "Scout": {
+    "file": "assets/animations/scout_actions.png",
+    "cellW": 420,
+    "cellH": 430,
+    "rows": {
+      "idle": 0,
+      "walk": 1,
+      "attack": 2,
+      "hurt": 3,
+      "dead": 4
+    },
+    "frames": {
+      "idle": 1,
+      "walk": 4,
+      "attack": 3,
+      "hurt": 1,
+      "dead": 1
+    },
+    "fps": {
+      "idle": 1.8,
+      "walk": 7.5,
+      "attack": 11,
+      "hurt": 8,
+      "dead": 5
+    },
+    "scale": 0.8
+  }
+}
