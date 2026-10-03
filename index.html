@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Lilith Defense 1-1 - No BGM Edition -->
+<!-- Lilith Defense 1-1 - Sound FX Restored, No BGM -->
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -57,7 +57,7 @@
   </div>
   <div id="story">
     <h2>Lilith Defense 1-1</h2>
-    <p>The night falls upon the citadel. Huge swarms of raiders are converging on the gate! Slay the enemy waves and defend the gate!</p>
+    <p>Hold the gate against the raiding warbands until sunrise reinforcements arrive! Pierce through the incoming horde with your archers and flame traps.</p>
     <button id="startBtn">Begin Defense</button>
   </div>
   <div id="result"></div>
@@ -70,7 +70,60 @@
   const canvas = $("game"), ctx = canvas.getContext("2d");
   const waveMsg = $("waveMsg"), story = $("story"), startBtn = $("startBtn"), result = $("result");
 
-  /* ==================== 美术资源载入系统 ==================== */
+  /* ==================== 原版战斗打击音效系统 (彻底去除BGM) ==================== */
+  let audioCtx = null;
+  const lastSfx = {};
+
+  function initAudio() {
+    if (!audioCtx) {
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    }
+    if (audioCtx && audioCtx.state === "suspended") {
+      audioCtx.resume();
+    }
+  }
+
+  function tone(f, d = 0.12, type = "sine", vol = 0.05, at = 0) {
+    if (!audioCtx) return;
+    const t = audioCtx.currentTime + at, o = audioCtx.createOscillator(), g = audioCtx.createGain();
+    o.type = type;
+    o.frequency.setValueAtTime(f, t);
+    o.frequency.exponentialRampToValueAtTime(Math.max(20, f * 0.5), t + d);
+    g.gain.setValueAtTime(0.001, t);
+    g.gain.linearRampToValueAtTime(vol, t + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + d);
+    o.connect(g);
+    g.connect(audioCtx.destination);
+    o.start(t);
+    o.stop(t + d + 0.02);
+  }
+
+  function noise(d = 0.1, vol = 0.05, freq = 800) {
+    if (!audioCtx) return;
+    const rate = audioCtx.sampleRate, buf = audioCtx.createBuffer(1, Math.max(1, rate * d), rate), data = buf.getChannelData(0);
+    for (let i = 0; i < data.length; i++) data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / data.length, 0.3);
+    const src = audioCtx.createBufferSource(), f = audioCtx.createBiquadFilter(), g = audioCtx.createGain();
+    f.type = "bandpass"; f.frequency.value = freq; g.gain.value = vol;
+    src.buffer = buf; src.connect(f); f.connect(g); g.connect(audioCtx.destination);
+    src.start();
+  }
+
+  function playSfx(k) {
+    initAudio();
+    if (!audioCtx) return;
+    const now = audioCtx.currentTime;
+    if (lastSfx[k] && now - lastSfx[k] < 0.05) return;
+    lastSfx[k] = now;
+    if (k === "bow") { tone(320, 0.06, "triangle", 0.04); noise(0.04, 0.02, 900); }
+    else if (k === "hit") { noise(0.06, 0.05, 450); tone(110, 0.06, "triangle", 0.03); }
+    else if (k === "heavy") { noise(0.12, 0.08, 220); tone(60, 0.14, "sine", 0.06); }
+    else if (k === "flame") { tone(500, 0.22, "triangle", 0.04); noise(0.28, 0.08, 750); tone(85, 0.45, "sine", 0.06, 0.08); }
+    else if (k === "gateHit") { noise(0.09, 0.07, 180); tone(65, 0.16, "sine", 0.05); }
+    else if (k === "victory") { tone(392, 0.18, "triangle", 0.05, 0); tone(523, 0.2, "triangle", 0.05, 0.14); tone(659, 0.3, "triangle", 0.06, 0.3); }
+    else if (k === "defeat") { tone(160, 0.28, "triangle", 0.05, 0); tone(110, 0.4, "sine", 0.05, 0.16); }
+  }
+
+  /* ==================== 真实美术资源挂载系统 ==================== */
   const ASSETS = {
     bg: { img: new Image(), ready: false },
     guard: { img: new Image(), ready: false, frames: 6 },
@@ -79,11 +132,9 @@
     brute: { img: new Image(), ready: false, frames: 6 }
   };
 
-  // 1. 加载大地图背景
   ASSETS.bg.img.src = "assets/stage_real_25d_battlefield_right_gate_v39_full_rebuild.png";
   ASSETS.bg.img.onload = () => { ASSETS.bg.ready = true; };
 
-  // 2. 加载动画素材
   function loadAnim(key, path) {
     ASSETS[key].img.src = path;
     ASSETS[key].img.onload = () => { ASSETS[key].ready = true; };
@@ -125,7 +176,7 @@
   function s2w(x, y) { return { x: Math.max(0, Math.min(100, x / view.w * 100)), z: Math.max(0, Math.min(100, y / view.h * 100)) }; }
   function dist(a, b) { return Math.hypot(a.x - b.x, a.z - b.z); }
 
-  /* ==================== 兵种逻辑与怪潮 ==================== */
+  /* ==================== 兵种与生成逻辑 ==================== */
   function spawnSoldier(type) {
     const isGuard = type === "Guard";
     soldiers.push({
@@ -156,11 +207,11 @@
     }
   }
 
-  // 初始守军
   for (let i = 0; i < 4; i++) spawnSoldier("Guard");
   for (let i = 0; i < 3; i++) spawnSoldier("Archer");
 
   startBtn.onclick = () => {
+    initAudio();
     S.started = true;
     story.classList.add("hide");
     triggerWave();
@@ -182,10 +233,11 @@
   $("dock").addEventListener("click", e => {
     const btn = e.target.closest("button");
     if (!btn) return;
+    initAudio();
     const a = btn.dataset.action;
     if (S.items[a] <= 0) return;
-    if (a === "CallGuard") { S.items.CallGuard--; spawnSoldier("Guard"); updateUI(); return; }
-    if (a === "CallArcher") { S.items.CallArcher--; spawnSoldier("Archer"); updateUI(); return; }
+    if (a === "CallGuard") { S.items.CallGuard--; spawnSoldier("Guard"); playSfx("hit"); updateUI(); return; }
+    if (a === "CallArcher") { S.items.CallArcher--; spawnSoldier("Archer"); playSfx("bow"); updateUI(); return; }
     S.pending = a;
     document.querySelectorAll("#dock button").forEach(b => b.classList.remove("active"));
     btn.classList.add("active");
@@ -193,17 +245,20 @@
 
   canvas.addEventListener("pointerdown", e => {
     if (!S.pending) return;
+    initAudio();
     const p = s2w(e.clientX, e.clientY);
     if (S.pending === "Oil") {
       S.items.Oil--;
       oils.push({ x: p.x, z: p.z, r: 28, life: 6.0, tick: 0.2 });
       S.shake = 0.35;
+      playSfx("flame");
       for (let i = 0; i < 35; i++) {
         particles.push({ x: p.x, z: p.z, vx: (Math.random()-0.5)*40, vz: (Math.random()-0.5)*40, life: 0.7, max: 0.7, color: "#f97316" });
       }
     } else if (S.pending === "Barricade") {
       S.items.Barricade--;
       blocks.push({ x: p.x, z: p.z, hp: 900, maxHp: 900, life: 40 });
+      playSfx("hit");
     }
     S.pending = null;
     document.querySelectorAll("#dock button").forEach(b => b.classList.remove("active"));
@@ -249,6 +304,7 @@
         if (en.cd <= 0) {
           en.cd = 0.8;
           nearHero.hp -= en.dmg;
+          playSfx("hit");
           texts.push({ x: nearHero.x, z: nearHero.z, txt: `-${en.dmg}`, color: "#f87171", life: 0.3 });
         }
         continue;
@@ -259,7 +315,12 @@
         if (dist(en, blk) < 7) { nearBlock = blk; break; }
       }
       if (nearBlock) {
-        if (en.cd <= 0) { en.cd = 0.8; nearBlock.hp -= en.dmg * 2; }
+        if (en.cd <= 0) {
+          en.cd = 0.8;
+          nearBlock.hp -= en.dmg * 2;
+          playSfx("hit");
+          if (nearBlock.hp <= 0) playSfx("heavy");
+        }
         continue;
       }
 
@@ -267,7 +328,8 @@
         if (en.cd <= 0) {
           en.cd = 0.9;
           S.gateHp -= en.dmg * 1.5;
-          S.shake = 0.1;
+          S.shake = 0.12;
+          playSfx("gateHit");
         }
         continue;
       }
@@ -283,7 +345,7 @@
       en.z = p0.z + (p1.z - p0.z) * t;
     }
 
-    // 守军 & 弓箭手割草
+    // 守军与弓箭手
     for (const sol of soldiers) {
       sol.cd -= dt;
       sol.animTime += dt * 6;
@@ -294,6 +356,7 @@
           if (!en.dead && dist(sol, en) < sol.range) {
             sol.cd = sol.cdMax;
             en.hp -= sol.dmg;
+            playSfx("hit");
             texts.push({ x: en.x, z: en.z, txt: `-${sol.dmg}`, color: "#38bdf8", life: 0.3 });
             break;
           }
@@ -308,6 +371,7 @@
         if (target) {
           sol.cd = sol.cdMax;
           shots.push({ ax: sol.x, az: sol.z, bx: target.x, bz: target.z, life: 0.25, max: 0.25 });
+          playSfx("bow");
           let pierce = 0;
           for (const en of enemies) {
             if (!en.dead && dist(en, target) < 14) {
@@ -321,7 +385,7 @@
       }
     }
 
-    // 清理
+    // 清理死亡与特效
     for (let i = enemies.length - 1; i >= 0; i--) {
       const en = enemies[i];
       if (en.hp <= 0) {
@@ -337,8 +401,9 @@
     for (let i = shots.length - 1; i >= 0; i--) { shots[i].life -= dt; if (shots[i].life <= 0) shots.splice(i, 1); }
     for (let i = texts.length - 1; i >= 0; i--) { texts[i].life -= dt; if (texts[i].life <= 0) texts.splice(i, 1); }
     for (let i = particles.length - 1; i >= 0; i--) {
-      particles[i].life -= dt; particles[i].x += particles[i].vx * dt; particles[i].z += particles[i].vz * dt;
-      if (particles[i].life <= 0) particles.splice(i, 1);
+      const p = particles[i];
+      p.life -= dt; p.x += p.vx * dt; p.z += p.vz * dt;
+      if (p.life <= 0) particles.splice(i, 1);
     }
 
     if (S.gateHp <= 0) endGame(false);
@@ -348,6 +413,7 @@
 
   function endGame(win) {
     S.gameOver = true;
+    playSfx(win ? "victory" : "defeat");
     result.innerHTML = `<div class="resCard">
       <h2>${win ? "VICTORY!" : "DEFEAT"}</h2>
       <p style="font-size:22px;margin:8px 0">${win ? "The fortress held against the unending tide!" : "The gate was breached by the swarm!"}</p>
@@ -374,7 +440,7 @@
     $("cBarricade").textContent = "x" + S.items.Barricade;
   }
 
-  /* ==================== 渲染引擎 ==================== */
+  /* ==================== 渲染引擎 (真实美术 + 智能兜底) ==================== */
   function draw() {
     ctx.save();
     if (S.shake > 0) {
@@ -382,7 +448,7 @@
     }
     ctx.clearRect(0, 0, view.w, view.h);
 
-    // 1. 真实大地图背景渲染
+    // 1. 真实背景大地图渲染
     if (ASSETS.bg.ready) {
       ctx.drawImage(ASSETS.bg.img, 0, 0, view.w, view.h);
     } else {
@@ -406,7 +472,7 @@
       ctx.fillStyle = "#5c3d24"; ctx.fillRect(gp.x - 18, gp.y - 45, 36, 55);
     }
 
-    // 2. 烈焰风暴
+    // 2. 烈焰火海
     for (const o of oils) {
       const p = w2s(o.x, o.z);
       ctx.fillStyle = "rgba(234,88,12,0.4)";
@@ -429,7 +495,7 @@
       ctx.beginPath(); ctx.moveTo(a.x, a.y - 10); ctx.lineTo(b.x, b.y - 10); ctx.stroke();
     }
 
-    // 5. 单位渲染 (按深度排序 + 贴图切片)
+    // 5. 单位渲染 (排序 + 动作序列帧贴图切片)
     const allUnits = [
       ...soldiers.map(u => ({ u, isSol: true })),
       ...enemies.map(u => ({ u, isSol: false }))
@@ -440,11 +506,11 @@
       const assetKey = item.isSol ? (u.type === "Guard" ? "guard" : "archer") : (u.type === "brute" ? "brute" : "grunt");
       const asset = ASSETS[assetKey];
 
-      // 阴影
+      // 地面阴影
       ctx.fillStyle = "rgba(0,0,0,0.3)";
       ctx.beginPath(); ctx.ellipse(p.x, p.y + 1, 9, 4, 0, 0, Math.PI * 2); ctx.fill();
 
-      // 贴图切片动画 / 矢量兜底
+      // 贴图切片绘制
       if (asset && asset.ready) {
         const frameIdx = Math.floor(u.animTime) % asset.frames;
         const sw = asset.img.naturalWidth / asset.frames;
@@ -453,6 +519,7 @@
         const dh = dw * (sh / sw);
         ctx.drawImage(asset.img, frameIdx * sw, 0, sw, sh, p.x - dw / 2, p.y - dh + 4, dw, dh);
       } else {
+        // 兜底小人
         ctx.fillStyle = item.isSol ? (u.type === "Guard" ? "#2563eb" : "#0284c7") : (u.type === "brute" ? "#701a75" : "#dc2626");
         ctx.fillRect(p.x - 6, p.y - 18, 12, 16);
         ctx.fillStyle = "#cbd5e1"; ctx.beginPath(); ctx.arc(p.x, p.y - 21, 5, 0, Math.PI * 2); ctx.fill();
@@ -464,7 +531,7 @@
       ctx.fillRect(p.x - 8, p.y - 28, 16 * Math.max(0, u.hp / u.maxHp), 3);
     }
 
-    // 6. 爆炸粒子与跳字
+    // 6. 粒子与伤害跳字
     for (const pt of particles) {
       const p = w2s(pt.x, pt.z);
       ctx.fillStyle = pt.color; ctx.fillRect(p.x, p.y - 8, 3, 3);
