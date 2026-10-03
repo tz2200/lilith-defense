@@ -1,10 +1,10 @@
 <!DOCTYPE html>
-<!-- Castle Defense 1-1 - Swarm Mayhem Edition -->
+<!-- Lilith Defense 1-1 - High-Density Real Asset Edition -->
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <title>Castle Defense 1-1 - Swarm Mayhem</title>
+  <title>Lilith Defense 1-1</title>
   <style>
     :root{--gold:#b88432;--ink:#251b13}
     html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#0d1822;font-family:"Segoe UI",Arial,sans-serif;touch-action:none;color:var(--ink)}
@@ -56,8 +56,8 @@
     <button data-action="Barricade"><span>🪵</span>Spike<span class="count" id="cBarricade">x6</span></button>
   </div>
   <div id="story">
-    <h2>1-1 Endless Swarm Defense</h2>
-    <p>Massive enemy legions are advancing across the three mountain passes! Archers now shoot piercing arrows. Use flame storms to incinerate the swarms!</p>
+    <h2>Lilith Defense 1-1</h2>
+    <p>The night falls upon the citadel. Huge swarms of raiders are converging on the gate! Slay the enemy waves and defend the gate!</p>
     <button id="startBtn">Begin Defense</button>
   </div>
   <div id="result"></div>
@@ -69,6 +69,35 @@
   const $ = id => document.getElementById(id);
   const canvas = $("game"), ctx = canvas.getContext("2d");
   const waveMsg = $("waveMsg"), story = $("story"), startBtn = $("startBtn"), result = $("result");
+
+  /* ==================== 美术资源载入系统 ==================== */
+  const ASSETS = {
+    bg: { img: new Image(), ready: false },
+    guard: { img: new Image(), ready: false, frames: 6 },
+    archer: { img: new Image(), ready: false, frames: 6 },
+    grunt: { img: new Image(), ready: false, frames: 6 },
+    brute: { img: new Image(), ready: false, frames: 6 }
+  };
+
+  // 1. 加载大地图背景
+  ASSETS.bg.img.src = "assets/stage_real_25d_battlefield_right_gate_v39_full_rebuild.png";
+  ASSETS.bg.img.onload = () => { ASSETS.bg.ready = true; };
+
+  // 2. 加载动画素材（同时支持 animations/ 目录及 assets/ 根目录）
+  function loadAnim(key, path) {
+    ASSETS[key].img.src = path;
+    ASSETS[key].img.onload = () => { ASSETS[key].ready = true; };
+    ASSETS[key].img.onerror = () => {
+      // 容错：如果在 animations 没找到，尝试在 assets 根目录下读取
+      if (path.includes("animations/")) {
+        ASSETS[key].img.src = path.replace("animations/", "");
+      }
+    };
+  }
+  loadAnim("guard", "assets/animations/guard_actions.png");
+  loadAnim("archer", "assets/animations/archer_actions.png");
+  loadAnim("grunt", "assets/animations/grunt_actions.png");
+  loadAnim("brute", "assets/animations/brute_actions.png");
 
   const S = {
     time: 0, duration: 180, gateHp: 4000, gateMax: 4000, kills: 0, wave: 0, totalWaves: 15,
@@ -97,7 +126,7 @@
   function s2w(x, y) { return { x: Math.max(0, Math.min(100, x / view.w * 100)), z: Math.max(0, Math.min(100, y / view.h * 100)) }; }
   function dist(a, b) { return Math.hypot(a.x - b.x, a.z - b.z); }
 
-  /* ==================== 史诗背景战歌合成器 ==================== */
+  /* ==================== 战歌声音合成器 ==================== */
   let bgmCtx = null, bgmStep = 0, bgmTimer = null;
   const BASS = [73.4, 87.3, 110.0, 98.0, 73.4, 116.5, 110.0, 82.4];
   const LEAD = [293.6, 0, 349.2, 329.6, 293.6, 440.0, 392.0, 329.6];
@@ -106,9 +135,7 @@
     if (!bgmCtx) return;
     const now = bgmCtx.currentTime, osc = bgmCtx.createOscillator(), g = bgmCtx.createGain();
     osc.type = type; osc.frequency.setValueAtTime(f, now);
-    if (drum) {
-      osc.frequency.exponentialRampToValueAtTime(30, now + dur);
-    }
+    if (drum) osc.frequency.exponentialRampToValueAtTime(30, now + dur);
     g.gain.setValueAtTime(0.001, now);
     g.gain.linearRampToValueAtTime(vol, now + 0.02);
     g.gain.exponentialRampToValueAtTime(0.0001, now + dur);
@@ -132,7 +159,7 @@
     loopBgm();
   }
 
-  /* ==================== 兵种与生成逻辑 ==================== */
+  /* ==================== 兵种逻辑与怪潮 ==================== */
   function spawnSoldier(type) {
     const isGuard = type === "Guard";
     soldiers.push({
@@ -141,7 +168,8 @@
       z: isGuard ? 48 + Math.random() * 6 : 38 + Math.random() * 6,
       hp: isGuard ? 850 : 350, maxHp: isGuard ? 850 : 350,
       range: isGuard ? 10 : 85, dmg: isGuard ? 45 : 38,
-      cdMax: isGuard ? 0.45 : 0.85, cd: 0
+      cdMax: isGuard ? 0.45 : 0.85, cd: 0,
+      animTime: Math.random() * 10
     });
   }
 
@@ -151,16 +179,18 @@
       const r = paths[rid];
       const offset = (Math.random() - 0.5) * 6;
       enemies.push({
+        type: (Math.random() < 0.2 && S.wave >= 4) ? "brute" : "grunt",
         r, rid, seg: 0, progress: -Math.random() * 12,
         x: r[0].x, z: r[0].z + offset,
         hp: 180, maxHp: 180,
         spd: (8 + Math.random() * 4) * speedMul,
-        dmg: 8, cd: 0, dead: false
+        dmg: 8, cd: 0, dead: false,
+        animTime: Math.random() * 10
       });
     }
   }
 
-  // 初始守军配置
+  // 初始守军
   for (let i = 0; i < 4; i++) spawnSoldier("Guard");
   for (let i = 0; i < 3; i++) spawnSoldier("Archer");
 
@@ -174,7 +204,6 @@
   function triggerWave() {
     if (S.wave >= S.totalWaves) return;
     S.wave++;
-    // 海量怪物生成机制：每波 30 ~ 75 只
     const swarmCount = 25 + S.wave * 4;
     spawnSwarm(swarmCount, 1.0 + S.wave * 0.03);
 
@@ -184,18 +213,14 @@
     S.spawnCd = 12.0;
   }
 
-  /* ==================== 技能释放与交互 ==================== */
+  /* ==================== 技能释放 ==================== */
   $("dock").addEventListener("click", e => {
     const btn = e.target.closest("button");
     if (!btn) return;
     const a = btn.dataset.action;
     if (S.items[a] <= 0) return;
-    if (a === "CallGuard") {
-      S.items.CallGuard--; spawnSoldier("Guard"); updateUI(); return;
-    }
-    if (a === "CallArcher") {
-      S.items.CallArcher--; spawnSoldier("Archer"); updateUI(); return;
-    }
+    if (a === "CallGuard") { S.items.CallGuard--; spawnSoldier("Guard"); updateUI(); return; }
+    if (a === "CallArcher") { S.items.CallArcher--; spawnSoldier("Archer"); updateUI(); return; }
     S.pending = a;
     document.querySelectorAll("#dock button").forEach(b => b.classList.remove("active"));
     btn.classList.add("active");
@@ -207,7 +232,7 @@
     if (S.pending === "Oil") {
       S.items.Oil--;
       oils.push({ x: p.x, z: p.z, r: 28, life: 6.0, tick: 0.2 });
-      S.shake = 0.35; // 烈焰轰炸震屏
+      S.shake = 0.35;
       for (let i = 0; i < 35; i++) {
         particles.push({ x: p.x, z: p.z, vx: (Math.random()-0.5)*40, vz: (Math.random()-0.5)*40, life: 0.7, max: 0.7, color: "#f97316" });
       }
@@ -220,7 +245,7 @@
     updateUI();
   });
 
-  /* ==================== 主更新逻辑 ==================== */
+  /* ==================== 帧更新循环 ==================== */
   function update(dt) {
     if (!S.started || S.gameOver) return;
     S.time += dt;
@@ -228,7 +253,7 @@
     S.spawnCd -= dt;
     if (S.spawnCd <= 0) triggerWave();
 
-    // 1. 烈焰火海 AOE
+    // 烈焰火海
     for (let i = oils.length - 1; i >= 0; i--) {
       const o = oils[i];
       o.life -= dt; o.tick -= dt;
@@ -244,12 +269,12 @@
       if (o.life <= 0) oils.splice(i, 1);
     }
 
-    // 2. 怪物行军与攻击
+    // 怪物
     for (const en of enemies) {
       if (en.dead) continue;
       en.cd -= dt;
+      en.animTime += dt * 6;
 
-      // 攻击防守英雄
       let nearHero = null, heroDist = 999;
       for (const sol of soldiers) {
         const d = dist(en, sol);
@@ -264,7 +289,6 @@
         continue;
       }
 
-      // 攻击路障
       let nearBlock = null;
       for (const blk of blocks) {
         if (dist(en, blk) < 7) { nearBlock = blk; break; }
@@ -274,7 +298,6 @@
         continue;
       }
 
-      // 冲击城堡大门
       if (en.x > 62 && en.z < 49) {
         if (en.cd <= 0) {
           en.cd = 0.9;
@@ -284,7 +307,6 @@
         continue;
       }
 
-      // 沿路行进
       const r = en.r, p0 = r[en.seg], p1 = r[Math.min(r.length - 1, en.seg + 1)];
       const segLen = dist(p0, p1) || 1;
       en.progress += en.spd * dt;
@@ -296,9 +318,10 @@
       en.z = p0.z + (p1.z - p0.z) * t;
     }
 
-    // 3. 守卫攻击与弓箭手“穿透割草”
+    // 守军 & 弓箭手割草
     for (const sol of soldiers) {
       sol.cd -= dt;
+      sol.animTime += dt * 6;
       if (sol.cd > 0) continue;
 
       if (sol.type === "Guard") {
@@ -311,7 +334,6 @@
           }
         }
       } else if (sol.type === "Archer") {
-        // 寻找射程内最近的目标
         let target = null, bestD = sol.range;
         for (const en of enemies) {
           if (en.dead) continue;
@@ -320,29 +342,26 @@
         }
         if (target) {
           sol.cd = sol.cdMax;
-          // 弓箭手发射“穿透箭”贯穿整条路线
           shots.push({ ax: sol.x, az: sol.z, bx: target.x, bz: target.z, life: 0.25, max: 0.25 });
-          // 一箭击中穿透半径内的最多 4 只怪
-          let pierceCount = 0;
+          let pierce = 0;
           for (const en of enemies) {
             if (!en.dead && dist(en, target) < 14) {
               en.hp -= sol.dmg;
               texts.push({ x: en.x, z: en.z, txt: `-${sol.dmg}`, color: "#fde047", life: 0.3 });
-              pierceCount++;
-              if (pierceCount >= 4) break;
+              pierce++;
+              if (pierce >= 4) break;
             }
           }
         }
       }
     }
 
-    // 4. 清理阵亡单位并爆出击杀粒子
+    // 清理
     for (let i = enemies.length - 1; i >= 0; i--) {
-      const en = enemies[i];
-      if (en.hp <= 0) {
+      if (enemies[i].hp <= 0) {
         S.kills++;
         for (let p = 0; p < 4; p++) {
-          particles.push({ x: en.x, z: en.z, vx: (Math.random()-0.5)*20, vz: (Math.random()-0.5)*20, life: 0.4, max: 0.4, color: "#ef4444" });
+          particles.push({ x: enemies[i].x, z: enemies[i].z, vx: (Math.random()-0.5)*20, vz: (Math.random()-0.5)*20, life: 0.4, max: 0.4, color: "#ef4444" });
         }
         enemies.splice(i, 1);
       }
@@ -352,9 +371,8 @@
     for (let i = shots.length - 1; i >= 0; i--) { shots[i].life -= dt; if (shots[i].life <= 0) shots.splice(i, 1); }
     for (let i = texts.length - 1; i >= 0; i--) { texts[i].life -= dt; if (texts[i].life <= 0) texts.splice(i, 1); }
     for (let i = particles.length - 1; i >= 0; i--) {
-      const p = particles[i];
-      p.life -= dt; p.x += p.vx * dt; p.z += p.vz * dt;
-      if (p.life <= 0) particles.splice(i, 1);
+      particles[i].life -= dt; particles[i].x += particles[i].vx * dt; particles[i].z += particles[i].vz * dt;
+      if (particles[i].life <= 0) particles.splice(i, 1);
     }
 
     if (S.gateHp <= 0) endGame(false);
@@ -390,40 +408,40 @@
     $("cBarricade").textContent = "x" + S.items.Barricade;
   }
 
-  /* ==================== 极简高效 2.5D 绘制 ==================== */
+  /* ==================== 渲染引擎 (真实美术 + 智能兜底) ==================== */
   function draw() {
     ctx.save();
-    // 屏幕震感
     if (S.shake > 0) {
       ctx.translate((Math.random() - 0.5) * 16 * S.shake, (Math.random() - 0.5) * 16 * S.shake);
     }
     ctx.clearRect(0, 0, view.w, view.h);
 
-    // 1. 战地地表
-    const g = ctx.createLinearGradient(0, 0, 0, view.h);
-    g.addColorStop(0, "#0a131c"); g.addColorStop(0.5, "#14221c"); g.addColorStop(1, "#1c1d15");
-    ctx.fillStyle = g; ctx.fillRect(0, 0, view.w, view.h);
+    // 1. 真实大地图背景渲染
+    if (ASSETS.bg.ready) {
+      ctx.drawImage(ASSETS.bg.img, 0, 0, view.w, view.h);
+    } else {
+      // 备选深色战地底图与行军路线
+      const g = ctx.createLinearGradient(0, 0, 0, view.h);
+      g.addColorStop(0, "#0a131c"); g.addColorStop(0.5, "#14221c"); g.addColorStop(1, "#1c1d15");
+      ctx.fillStyle = g; ctx.fillRect(0, 0, view.w, view.h);
 
-    // 2. 进攻路线
-    ctx.strokeStyle = "rgba(75,50,30,0.75)";
-    ctx.lineWidth = view.scale * 3.4;
-    ctx.lineCap = "round"; ctx.lineJoin = "round";
-    for (const r of paths) {
-      ctx.beginPath();
-      for (let i = 0; i < r.length; i++) {
-        const p = w2s(r[i].x, r[i].z);
-        if (i === 0) ctx.moveTo(p.x, p.y); else ctx.lineTo(p.x, p.y);
+      ctx.strokeStyle = "rgba(75,50,30,0.75)";
+      ctx.lineWidth = view.scale * 3.4;
+      ctx.lineCap = "round"; ctx.lineJoin = "round";
+      for (const r of paths) {
+        ctx.beginPath();
+        for (let i = 0; i < r.length; i++) {
+          const p = w2s(r[i].x, r[i].z);
+          if (i === 0) ctx.moveTo(p.x, p.y); else ctx.lineTo(p.x, p.y);
+        }
+        ctx.stroke();
       }
-      ctx.stroke();
+      const gp = w2s(gate.x, gate.z);
+      ctx.fillStyle = "#1e1610"; ctx.fillRect(gp.x - 24, gp.y - 50, 48, 60);
+      ctx.fillStyle = "#5c3d24"; ctx.fillRect(gp.x - 18, gp.y - 45, 36, 55);
     }
 
-    // 3. 城堡要塞
-    const gp = w2s(gate.x, gate.z);
-    ctx.fillStyle = "#1e1610"; ctx.fillRect(gp.x - 24, gp.y - 50, 48, 60);
-    ctx.fillStyle = "#5c3d24"; ctx.fillRect(gp.x - 18, gp.y - 45, 36, 55);
-    ctx.fillStyle = "#b45309"; ctx.fillRect(gp.x - 22, gp.y - 56, 44, 8);
-
-    // 4. 烈焰火海
+    // 2. 烈焰风暴
     for (const o of oils) {
       const p = w2s(o.x, o.z);
       ctx.fillStyle = "rgba(234,88,12,0.4)";
@@ -432,58 +450,65 @@
       ctx.beginPath(); ctx.ellipse(p.x, p.y, o.r * view.scale * 0.2, o.r * view.scale * 0.1, 0, 0, Math.PI * 2); ctx.fill();
     }
 
-    // 5. 木桩路障
+    // 3. 木桩路障
     for (const b of blocks) {
       const p = w2s(b.x, b.z);
       ctx.fillStyle = "#854d0e"; ctx.fillRect(p.x - 10, p.y - 12, 20, 16);
       ctx.fillStyle = "#22c55e"; ctx.fillRect(p.x - 10, p.y - 16, 20 * (b.hp / b.maxHp), 3);
     }
 
-    // 6. 穿透箭光束
+    // 4. 穿透箭
     ctx.strokeStyle = "#fef08a"; ctx.lineWidth = 2.8;
     for (const s of shots) {
       const a = w2s(s.ax, s.az), b = w2s(s.bx, s.bz);
       ctx.beginPath(); ctx.moveTo(a.x, a.y - 10); ctx.lineTo(b.x, b.y - 10); ctx.stroke();
     }
 
-    // 7. 高性能批处理绘制单位
-    // 怪物群 (红色海量单位)
-    for (const en of enemies) {
-      const p = w2s(en.x, en.z);
-      ctx.fillStyle = "rgba(0,0,0,0.3)";
-      ctx.beginPath(); ctx.ellipse(p.x, p.y + 1, 6, 3, 0, 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = "#dc2626";
-      ctx.fillRect(p.x - 4, p.y - 12, 8, 11);
-      ctx.fillStyle = "#f87171";
-      ctx.fillRect(p.x - 3, p.y - 15, 6, 4);
-    }
+    // 5. 单位渲染 (按深度排序 + 贴图切片)
+    const allUnits = [
+      ...soldiers.map(u => ({ u, isSol: true })),
+      ...enemies.map(u => ({ u, isSol: false }))
+    ].sort((a, b) => a.u.z - b.u.z);
 
-    // 守军 (蓝色英勇单位)
-    for (const sol of soldiers) {
-      const p = w2s(sol.x, sol.z);
-      ctx.fillStyle = sol.type === "Guard" ? "#2563eb" : "#0284c7";
-      ctx.fillRect(p.x - 6, p.y - 18, 12, 16);
-      ctx.fillStyle = "#cbd5e1";
-      ctx.beginPath(); ctx.arc(p.x, p.y - 21, 5, 0, Math.PI * 2); ctx.fill();
+    for (const item of allUnits) {
+      const u = item.u, p = w2s(u.x, u.z);
+      const assetKey = item.isSol ? (u.type === "Guard" ? "guard" : "archer") : (u.type === "brute" ? "brute" : "grunt");
+      const asset = ASSETS[assetKey];
+
+      // 阴影
+      ctx.fillStyle = "rgba(0,0,0,0.3)";
+      ctx.beginPath(); ctx.ellipse(p.x, p.y + 1, 9, 4, 0, 0, Math.PI * 2); ctx.fill();
+
+      // 如果图片素材加载成功，切片绘制真实动画；否则自动以矢量形态兜底
+      if (asset && asset.ready) {
+        const frameIdx = Math.floor(u.animTime) % asset.frames;
+        const sw = asset.img.naturalWidth / asset.frames;
+        const sh = asset.img.naturalHeight;
+        const dw = 36 * (u.type === "brute" ? 1.4 : 1.0);
+        const dh = dw * (sh / sw);
+        ctx.drawImage(asset.img, frameIdx * sw, 0, sw, sh, p.x - dw / 2, p.y - dh + 4, dw, dh);
+      } else {
+        // 兜底小人
+        ctx.fillStyle = item.isSol ? (u.type === "Guard" ? "#2563eb" : "#0284c7") : (u.type === "brute" ? "#701a75" : "#dc2626");
+        ctx.fillRect(p.x - 6, p.y - 18, 12, 16);
+        ctx.fillStyle = "#cbd5e1"; ctx.beginPath(); ctx.arc(p.x, p.y - 21, 5, 0, Math.PI * 2); ctx.fill();
+      }
+
       // 血条
       ctx.fillStyle = "rgba(0,0,0,0.6)"; ctx.fillRect(p.x - 8, p.y - 28, 16, 3);
-      ctx.fillStyle = "#38bdf8"; ctx.fillRect(p.x - 8, p.y - 28, 16 * (sol.hp / sol.maxHp), 3);
+      ctx.fillStyle = item.isSol ? "#38bdf8" : "#ef4444";
+      ctx.fillRect(p.x - 8, p.y - 28, 16 * Math.max(0, u.hp / u.maxHp), 3);
     }
 
-    // 8. 爆炸粒子
+    // 6. 爆炸粒子与跳字
     for (const pt of particles) {
       const p = w2s(pt.x, pt.z);
-      ctx.fillStyle = pt.color;
-      ctx.fillRect(p.x, p.y - 8, 3, 3);
+      ctx.fillStyle = pt.color; ctx.fillRect(p.x, p.y - 8, 3, 3);
     }
-
-    // 9. 伤害跳字
-    ctx.font = "900 12px Segoe UI";
-    ctx.textAlign = "center";
+    ctx.font = "900 12px Segoe UI"; ctx.textAlign = "center";
     for (const txt of texts) {
       const p = w2s(txt.x, txt.z);
-      ctx.fillStyle = txt.color;
-      ctx.fillText(txt.txt, p.x, p.y - 18);
+      ctx.fillStyle = txt.color; ctx.fillText(txt.txt, p.x, p.y - 18);
     }
 
     ctx.restore();
