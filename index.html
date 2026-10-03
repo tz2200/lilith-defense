@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Lilith Defense 1-1 - High-Density Real Asset Edition -->
+<!-- Lilith Defense 1-1 - No BGM Edition -->
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -83,12 +83,11 @@
   ASSETS.bg.img.src = "assets/stage_real_25d_battlefield_right_gate_v39_full_rebuild.png";
   ASSETS.bg.img.onload = () => { ASSETS.bg.ready = true; };
 
-  // 2. 加载动画素材（同时支持 animations/ 目录及 assets/ 根目录）
+  // 2. 加载动画素材
   function loadAnim(key, path) {
     ASSETS[key].img.src = path;
     ASSETS[key].img.onload = () => { ASSETS[key].ready = true; };
     ASSETS[key].img.onerror = () => {
-      // 容错：如果在 animations 没找到，尝试在 assets 根目录下读取
       if (path.includes("animations/")) {
         ASSETS[key].img.src = path.replace("animations/", "");
       }
@@ -125,39 +124,6 @@
   function w2s(x, z) { return { x: view.w * (x / 100), y: view.h * (z / 100) }; }
   function s2w(x, y) { return { x: Math.max(0, Math.min(100, x / view.w * 100)), z: Math.max(0, Math.min(100, y / view.h * 100)) }; }
   function dist(a, b) { return Math.hypot(a.x - b.x, a.z - b.z); }
-
-  /* ==================== 战歌声音合成器 ==================== */
-  let bgmCtx = null, bgmStep = 0, bgmTimer = null;
-  const BASS = [73.4, 87.3, 110.0, 98.0, 73.4, 116.5, 110.0, 82.4];
-  const LEAD = [293.6, 0, 349.2, 329.6, 293.6, 440.0, 392.0, 329.6];
-
-  function playBgmNote(f, dur, type, vol, drum = false) {
-    if (!bgmCtx) return;
-    const now = bgmCtx.currentTime, osc = bgmCtx.createOscillator(), g = bgmCtx.createGain();
-    osc.type = type; osc.frequency.setValueAtTime(f, now);
-    if (drum) osc.frequency.exponentialRampToValueAtTime(30, now + dur);
-    g.gain.setValueAtTime(0.001, now);
-    g.gain.linearRampToValueAtTime(vol, now + 0.02);
-    g.gain.exponentialRampToValueAtTime(0.0001, now + dur);
-    osc.connect(g); g.connect(bgmCtx.destination);
-    osc.start(now); osc.stop(now + dur + 0.04);
-  }
-  function loopBgm() {
-    if (S.gameOver) return;
-    const s = bgmStep % 8;
-    if (s % 2 === 0) playBgmNote(130, 0.3, "sine", 0.18, true);
-    playBgmNote(BASS[s], 0.35, "sawtooth", 0.04);
-    if (LEAD[s] > 0) playBgmNote(LEAD[s], 0.4, "triangle", 0.05);
-    bgmStep++;
-    bgmTimer = setTimeout(loopBgm, 360);
-  }
-  function startBgm() {
-    const AC = window.AudioContext || window.webkitAudioContext;
-    if (!AC) return;
-    bgmCtx = new AC();
-    if (bgmCtx.state === "suspended") bgmCtx.resume();
-    loopBgm();
-  }
 
   /* ==================== 兵种逻辑与怪潮 ==================== */
   function spawnSoldier(type) {
@@ -197,7 +163,6 @@
   startBtn.onclick = () => {
     S.started = true;
     story.classList.add("hide");
-    startBgm();
     triggerWave();
   };
 
@@ -358,10 +323,11 @@
 
     // 清理
     for (let i = enemies.length - 1; i >= 0; i--) {
-      if (enemies[i].hp <= 0) {
+      const en = enemies[i];
+      if (en.hp <= 0) {
         S.kills++;
         for (let p = 0; p < 4; p++) {
-          particles.push({ x: enemies[i].x, z: enemies[i].z, vx: (Math.random()-0.5)*20, vz: (Math.random()-0.5)*20, life: 0.4, max: 0.4, color: "#ef4444" });
+          particles.push({ x: en.x, z: en.z, vx: (Math.random()-0.5)*20, vz: (Math.random()-0.5)*20, life: 0.4, max: 0.4, color: "#ef4444" });
         }
         enemies.splice(i, 1);
       }
@@ -408,7 +374,7 @@
     $("cBarricade").textContent = "x" + S.items.Barricade;
   }
 
-  /* ==================== 渲染引擎 (真实美术 + 智能兜底) ==================== */
+  /* ==================== 渲染引擎 ==================== */
   function draw() {
     ctx.save();
     if (S.shake > 0) {
@@ -420,7 +386,6 @@
     if (ASSETS.bg.ready) {
       ctx.drawImage(ASSETS.bg.img, 0, 0, view.w, view.h);
     } else {
-      // 备选深色战地底图与行军路线
       const g = ctx.createLinearGradient(0, 0, 0, view.h);
       g.addColorStop(0, "#0a131c"); g.addColorStop(0.5, "#14221c"); g.addColorStop(1, "#1c1d15");
       ctx.fillStyle = g; ctx.fillRect(0, 0, view.w, view.h);
@@ -479,7 +444,7 @@
       ctx.fillStyle = "rgba(0,0,0,0.3)";
       ctx.beginPath(); ctx.ellipse(p.x, p.y + 1, 9, 4, 0, 0, Math.PI * 2); ctx.fill();
 
-      // 如果图片素材加载成功，切片绘制真实动画；否则自动以矢量形态兜底
+      // 贴图切片动画 / 矢量兜底
       if (asset && asset.ready) {
         const frameIdx = Math.floor(u.animTime) % asset.frames;
         const sw = asset.img.naturalWidth / asset.frames;
@@ -488,7 +453,6 @@
         const dh = dw * (sh / sw);
         ctx.drawImage(asset.img, frameIdx * sw, 0, sw, sh, p.x - dw / 2, p.y - dh + 4, dw, dh);
       } else {
-        // 兜底小人
         ctx.fillStyle = item.isSol ? (u.type === "Guard" ? "#2563eb" : "#0284c7") : (u.type === "brute" ? "#701a75" : "#dc2626");
         ctx.fillRect(p.x - 6, p.y - 18, 12, 16);
         ctx.fillStyle = "#cbd5e1"; ctx.beginPath(); ctx.arc(p.x, p.y - 21, 5, 0, Math.PI * 2); ctx.fill();
