@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Lilith Defense 1-1 - Sound FX Restored, No BGM -->
+<!-- Lilith Defense 1-1 - Universal Sprite Frame Adapter -->
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -70,32 +70,24 @@
   const canvas = $("game"), ctx = canvas.getContext("2d");
   const waveMsg = $("waveMsg"), story = $("story"), startBtn = $("startBtn"), result = $("result");
 
-  /* ==================== 原版战斗打击音效系统 (彻底去除BGM) ==================== */
+  /* ==================== 纯净战斗打击音效 (无BGM) ==================== */
   let audioCtx = null;
   const lastSfx = {};
 
   function initAudio() {
-    if (!audioCtx) {
-      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    }
-    if (audioCtx && audioCtx.state === "suspended") {
-      audioCtx.resume();
-    }
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx && audioCtx.state === "suspended") audioCtx.resume();
   }
 
   function tone(f, d = 0.12, type = "sine", vol = 0.05, at = 0) {
     if (!audioCtx) return;
     const t = audioCtx.currentTime + at, o = audioCtx.createOscillator(), g = audioCtx.createGain();
-    o.type = type;
-    o.frequency.setValueAtTime(f, t);
+    o.type = type; o.frequency.setValueAtTime(f, t);
     o.frequency.exponentialRampToValueAtTime(Math.max(20, f * 0.5), t + d);
-    g.gain.setValueAtTime(0.001, t);
-    g.gain.linearRampToValueAtTime(vol, t + 0.01);
+    g.gain.setValueAtTime(0.001, t); g.gain.linearRampToValueAtTime(vol, t + 0.01);
     g.gain.exponentialRampToValueAtTime(0.0001, t + d);
-    o.connect(g);
-    g.connect(audioCtx.destination);
-    o.start(t);
-    o.stop(t + d + 0.02);
+    o.connect(g); g.connect(audioCtx.destination);
+    o.start(t); o.stop(t + d + 0.02);
   }
 
   function noise(d = 0.1, vol = 0.05, freq = 800) {
@@ -123,31 +115,30 @@
     else if (k === "defeat") { tone(160, 0.28, "triangle", 0.05, 0); tone(110, 0.4, "sine", 0.05, 0.16); }
   }
 
-  /* ==================== 真实美术资源挂载系统 ==================== */
+  /* ==================== 智能角色贴图载入与切片元数据 ==================== */
   const ASSETS = {
     bg: { img: new Image(), ready: false },
-    guard: { img: new Image(), ready: false, frames: 6 },
-    archer: { img: new Image(), ready: false, frames: 6 },
-    grunt: { img: new Image(), ready: false, frames: 6 },
-    brute: { img: new Image(), ready: false, frames: 6 }
+    guard: { img: new Image(), ready: false },
+    archer: { img: new Image(), ready: false },
+    grunt: { img: new Image(), ready: false },
+    brute: { img: new Image(), ready: false }
   };
 
-  ASSETS.bg.img.src = "assets/stage_real_25d_battlefield_right_gate_v39_full_rebuild.png";
   ASSETS.bg.img.onload = () => { ASSETS.bg.ready = true; };
+  ASSETS.bg.img.src = "assets/stage_real_25d_battlefield_right_gate_v39_full_rebuild.png";
 
-  function loadAnim(key, path) {
-    ASSETS[key].img.src = path;
-    ASSETS[key].img.onload = () => { ASSETS[key].ready = true; };
-    ASSETS[key].img.onerror = () => {
-      if (path.includes("animations/")) {
-        ASSETS[key].img.src = path.replace("animations/", "");
-      }
+  function registerAnim(key, primary, fallback) {
+    const item = ASSETS[key];
+    item.img.onload = () => { item.ready = true; };
+    item.img.onerror = () => {
+      if (fallback && item.img.src !== fallback) item.img.src = fallback;
     };
+    item.img.src = primary;
   }
-  loadAnim("guard", "assets/animations/guard_actions.png");
-  loadAnim("archer", "assets/animations/archer_actions.png");
-  loadAnim("grunt", "assets/animations/grunt_actions.png");
-  loadAnim("brute", "assets/animations/brute_actions.png");
+  registerAnim("guard", "assets/animations/guard_actions.png", "assets/guard_anim.png");
+  registerAnim("archer", "assets/animations/archer_actions.png", "assets/archer_actions.png");
+  registerAnim("grunt", "assets/animations/grunt_actions.png", "assets/grunt_actions.png");
+  registerAnim("brute", "assets/animations/brute_actions.png", "assets/brute_actions.png");
 
   const S = {
     time: 0, duration: 180, gateHp: 4000, gateMax: 4000, kills: 0, wave: 0, totalWaves: 15,
@@ -186,7 +177,7 @@
       hp: isGuard ? 850 : 350, maxHp: isGuard ? 850 : 350,
       range: isGuard ? 10 : 85, dmg: isGuard ? 45 : 38,
       cdMax: isGuard ? 0.45 : 0.85, cd: 0,
-      animTime: Math.random() * 10
+      animTime: Math.random() * 10, isAttacking: false
     });
   }
 
@@ -202,7 +193,7 @@
         hp: 180, maxHp: 180,
         spd: (8 + Math.random() * 4) * speedMul,
         dmg: 8, cd: 0, dead: false,
-        animTime: Math.random() * 10
+        animTime: Math.random() * 10, isAttacking: false
       });
     }
   }
@@ -289,11 +280,12 @@
       if (o.life <= 0) oils.splice(i, 1);
     }
 
-    // 怪物
+    // 怪物移动与攻击
     for (const en of enemies) {
       if (en.dead) continue;
       en.cd -= dt;
       en.animTime += dt * 6;
+      en.isAttacking = false;
 
       let nearHero = null, heroDist = 999;
       for (const sol of soldiers) {
@@ -301,6 +293,7 @@
         if (d < heroDist) { heroDist = d; nearHero = sol; }
       }
       if (nearHero && heroDist < 6) {
+        en.isAttacking = true;
         if (en.cd <= 0) {
           en.cd = 0.8;
           nearHero.hp -= en.dmg;
@@ -315,6 +308,7 @@
         if (dist(en, blk) < 7) { nearBlock = blk; break; }
       }
       if (nearBlock) {
+        en.isAttacking = true;
         if (en.cd <= 0) {
           en.cd = 0.8;
           nearBlock.hp -= en.dmg * 2;
@@ -325,6 +319,7 @@
       }
 
       if (en.x > 62 && en.z < 49) {
+        en.isAttacking = true;
         if (en.cd <= 0) {
           en.cd = 0.9;
           S.gateHp -= en.dmg * 1.5;
@@ -349,11 +344,13 @@
     for (const sol of soldiers) {
       sol.cd -= dt;
       sol.animTime += dt * 6;
+      sol.isAttacking = false;
       if (sol.cd > 0) continue;
 
       if (sol.type === "Guard") {
         for (const en of enemies) {
           if (!en.dead && dist(sol, en) < sol.range) {
+            sol.isAttacking = true;
             sol.cd = sol.cdMax;
             en.hp -= sol.dmg;
             playSfx("hit");
@@ -369,6 +366,7 @@
           if (d < bestD) { bestD = d; target = en; }
         }
         if (target) {
+          sol.isAttacking = true;
           sol.cd = sol.cdMax;
           shots.push({ ax: sol.x, az: sol.z, bx: target.x, bz: target.z, life: 0.25, max: 0.25 });
           playSfx("bow");
@@ -385,7 +383,7 @@
       }
     }
 
-    // 清理死亡与特效
+    // 清理
     for (let i = enemies.length - 1; i >= 0; i--) {
       const en = enemies[i];
       if (en.hp <= 0) {
@@ -440,7 +438,45 @@
     $("cBarricade").textContent = "x" + S.items.Barricade;
   }
 
-  /* ==================== 渲染引擎 (真实美术 + 智能兜底) ==================== */
+  /* ==================== 智能角色动作切片渲染引擎 ==================== */
+  function drawUnitSprite(ctx, asset, u, p) {
+    const img = asset.img;
+    const nw = img.naturalWidth, nh = img.naturalHeight;
+    if (!nw || !nh) return false;
+
+    // 自适应网格行列判断（兼容单行条形图与多行多列动作大图）
+    let cols = 6, rows = 1;
+    if (nw / nh > 3) {
+      // 极宽图：单行动作表（如 6 帧或 8 帧）
+      cols = nw > 1500 ? 8 : 6;
+      rows = 1;
+    } else if (nw / nh > 1.2) {
+      // 宽矩形图：多行动作大图（常见 6 列 5 行，分别为待机/跑/攻击/受击/倒地）
+      cols = 6;
+      rows = 5;
+    } else {
+      // 接近正方形图或多宫格
+      cols = 4;
+      rows = 4;
+    }
+
+    const sw = nw / cols;
+    const sh = nh / rows;
+    const frameIdx = Math.floor(u.animTime) % cols;
+    // 如果在攻击则选用第 2 行，否则行走选用第 1 行或第 0 行
+    const rowIdx = rows > 1 ? (u.isAttacking ? Math.min(2, rows - 1) : Math.min(1, rows - 1)) : 0;
+
+    const sx = frameIdx * sw;
+    const sy = rowIdx * sh;
+
+    // 绘制尺寸
+    const dw = 42 * (u.type === "brute" ? 1.4 : 1.0);
+    const dh = dw * (sh / sw);
+
+    ctx.drawImage(img, sx, sy, sw, sh, p.x - dw / 2, p.y - dh + 6, dw, dh);
+    return true;
+  }
+
   function draw() {
     ctx.save();
     if (S.shake > 0) {
@@ -449,7 +485,7 @@
     ctx.clearRect(0, 0, view.w, view.h);
 
     // 1. 真实背景大地图渲染
-    if (ASSETS.bg.ready) {
+    if (ASSETS.bg.ready && ASSETS.bg.img.naturalWidth > 0) {
       ctx.drawImage(ASSETS.bg.img, 0, 0, view.w, view.h);
     } else {
       const g = ctx.createLinearGradient(0, 0, 0, view.h);
@@ -488,14 +524,14 @@
       ctx.fillStyle = "#22c55e"; ctx.fillRect(p.x - 10, p.y - 16, 20 * (b.hp / b.maxHp), 3);
     }
 
-    // 4. 穿透箭
+    // 4. 穿透箭光束
     ctx.strokeStyle = "#fef08a"; ctx.lineWidth = 2.8;
     for (const s of shots) {
       const a = w2s(s.ax, s.az), b = w2s(s.bx, s.bz);
       ctx.beginPath(); ctx.moveTo(a.x, a.y - 10); ctx.lineTo(b.x, b.y - 10); ctx.stroke();
     }
 
-    // 5. 单位渲染 (排序 + 动作序列帧贴图切片)
+    // 5. 单位渲染 (深度排序 + 动作序列帧贴图切片)
     const allUnits = [
       ...soldiers.map(u => ({ u, isSol: true })),
       ...enemies.map(u => ({ u, isSol: false }))
@@ -510,22 +546,20 @@
       ctx.fillStyle = "rgba(0,0,0,0.3)";
       ctx.beginPath(); ctx.ellipse(p.x, p.y + 1, 9, 4, 0, 0, Math.PI * 2); ctx.fill();
 
-      // 贴图切片绘制
+      // 尝试自适应动作贴图绘制
+      let drawn = false;
       if (asset && asset.ready) {
-        const frameIdx = Math.floor(u.animTime) % asset.frames;
-        const sw = asset.img.naturalWidth / asset.frames;
-        const sh = asset.img.naturalHeight;
-        const dw = 36 * (u.type === "brute" ? 1.4 : 1.0);
-        const dh = dw * (sh / sw);
-        ctx.drawImage(asset.img, frameIdx * sw, 0, sw, sh, p.x - dw / 2, p.y - dh + 4, dw, dh);
-      } else {
-        // 兜底小人
+        drawn = drawUnitSprite(ctx, asset, u, p);
+      }
+
+      // 未就绪时的矢量兜底小人
+      if (!drawn) {
         ctx.fillStyle = item.isSol ? (u.type === "Guard" ? "#2563eb" : "#0284c7") : (u.type === "brute" ? "#701a75" : "#dc2626");
         ctx.fillRect(p.x - 6, p.y - 18, 12, 16);
         ctx.fillStyle = "#cbd5e1"; ctx.beginPath(); ctx.arc(p.x, p.y - 21, 5, 0, Math.PI * 2); ctx.fill();
       }
 
-      // 血条
+      // 顶部血条
       ctx.fillStyle = "rgba(0,0,0,0.6)"; ctx.fillRect(p.x - 8, p.y - 28, 16, 3);
       ctx.fillStyle = item.isSol ? "#38bdf8" : "#ef4444";
       ctx.fillRect(p.x - 8, p.y - 28, 16 * Math.max(0, u.hp / u.maxHp), 3);
