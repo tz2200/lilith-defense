@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Lilith Defense 1-1 - Universal Sprite Frame Adapter -->
+<!-- Lilith Defense 1-1 - Calibrated Motion & Real Path Edition -->
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -57,7 +57,7 @@
   </div>
   <div id="story">
     <h2>Lilith Defense 1-1</h2>
-    <p>Hold the gate against the raiding warbands until sunrise reinforcements arrive! Pierce through the incoming horde with your archers and flame traps.</p>
+    <p>Hold the gate against the raiding warbands! Maintain defensive formation at the crossroads.</p>
     <button id="startBtn">Begin Defense</button>
   </div>
   <div id="result"></div>
@@ -70,15 +70,13 @@
   const canvas = $("game"), ctx = canvas.getContext("2d");
   const waveMsg = $("waveMsg"), story = $("story"), startBtn = $("startBtn"), result = $("result");
 
-  /* ==================== 纯净战斗打击音效 (无BGM) ==================== */
+  /* ==================== 原版战斗音效 (无BGM) ==================== */
   let audioCtx = null;
   const lastSfx = {};
-
   function initAudio() {
     if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     if (audioCtx && audioCtx.state === "suspended") audioCtx.resume();
   }
-
   function tone(f, d = 0.12, type = "sine", vol = 0.05, at = 0) {
     if (!audioCtx) return;
     const t = audioCtx.currentTime + at, o = audioCtx.createOscillator(), g = audioCtx.createGain();
@@ -89,7 +87,6 @@
     o.connect(g); g.connect(audioCtx.destination);
     o.start(t); o.stop(t + d + 0.02);
   }
-
   function noise(d = 0.1, vol = 0.05, freq = 800) {
     if (!audioCtx) return;
     const rate = audioCtx.sampleRate, buf = audioCtx.createBuffer(1, Math.max(1, rate * d), rate), data = buf.getChannelData(0);
@@ -99,12 +96,11 @@
     src.buffer = buf; src.connect(f); f.connect(g); g.connect(audioCtx.destination);
     src.start();
   }
-
   function playSfx(k) {
     initAudio();
     if (!audioCtx) return;
     const now = audioCtx.currentTime;
-    if (lastSfx[k] && now - lastSfx[k] < 0.05) return;
+    if (lastSfx[k] && now - lastSfx[k] < 0.06) return;
     lastSfx[k] = now;
     if (k === "bow") { tone(320, 0.06, "triangle", 0.04); noise(0.04, 0.02, 900); }
     else if (k === "hit") { noise(0.06, 0.05, 450); tone(110, 0.06, "triangle", 0.03); }
@@ -115,7 +111,7 @@
     else if (k === "defeat") { tone(160, 0.28, "triangle", 0.05, 0); tone(110, 0.4, "sine", 0.05, 0.16); }
   }
 
-  /* ==================== 智能角色贴图载入与切片元数据 ==================== */
+  /* ==================== 真实美术素材挂载 ==================== */
   const ASSETS = {
     bg: { img: new Image(), ready: false },
     guard: { img: new Image(), ready: false },
@@ -140,6 +136,20 @@
   registerAnim("grunt", "assets/animations/grunt_actions.png", "assets/grunt_actions.png");
   registerAnim("brute", "assets/animations/brute_actions.png", "assets/brute_actions.png");
 
+  /* ==================== 完美贴合大地图的车辙路径 ==================== */
+  // 大门真实像素坐标 (右侧大木门前三岔汇聚点)
+  const gateLoc = { x: 84, z: 27 };
+
+  // 1:1 对齐地图背景上的三条真实泥土车辙
+  const paths = [
+    // 上路：从左上山路弯延向右，经过木桩防线汇聚到门前
+    [{x: 1, z: 22}, {x: 14, z: 28}, {x: 28, z: 37}, {x: 42, z: 42}, {x: 58, z: 40}, {x: 72, z: 48}, {x: 84, z: 32}, {x: 84, z: 27}],
+    // 中路：从左侧中部车辙平直推进，经过中间草丘汇入
+    [{x: 1, z: 48}, {x: 16, z: 50}, {x: 33, z: 48}, {x: 48, z: 45}, {x: 62, z: 46}, {x: 74, z: 53}, {x: 84, z: 35}, {x: 84, z: 27}],
+    // 下路：从左下坡道向右上延伸，经过大板车，汇聚到十字路口
+    [{x: 18, z: 88}, {x: 32, z: 74}, {x: 44, z: 63}, {x: 56, z: 58}, {x: 70, z: 56}, {x: 80, z: 45}, {x: 84, z: 27}]
+  ];
+
   const S = {
     time: 0, duration: 180, gateHp: 4000, gateMax: 4000, kills: 0, wave: 0, totalWaves: 15,
     started: false, gameOver: false, shake: 0, pending: null, spawnCd: 1.0,
@@ -147,12 +157,6 @@
   };
 
   const soldiers = [], enemies = [], blocks = [], oils = [], shots = [], particles = [], texts = [];
-  const paths = [
-    [{x:1,z:25},{x:20,z:30},{x:42,z:40},{x:60,z:44},{x:65,z:45}],
-    [{x:1,z:55},{x:25,z:53},{x:48,z:48},{x:60,z:46},{x:65,z:45}],
-    [{x:5,z:92},{x:25,z:78},{x:45,z:60},{x:60,z:48},{x:65,z:45}]
-  ];
-  const gate = { x: 65, z: 45 };
 
   let view = { w: 1, h: 1, scale: 8 };
   function resize() {
@@ -167,38 +171,40 @@
   function s2w(x, y) { return { x: Math.max(0, Math.min(100, x / view.w * 100)), z: Math.max(0, Math.min(100, y / view.h * 100)) }; }
   function dist(a, b) { return Math.hypot(a.x - b.x, a.z - b.z); }
 
-  /* ==================== 兵种与生成逻辑 ==================== */
+  /* ==================== 兵种生成与驻守位置校准 ==================== */
   function spawnSoldier(type) {
     const isGuard = type === "Guard";
     soldiers.push({
       type,
-      x: isGuard ? 55 + Math.random() * 8 : 68 + Math.random() * 8,
-      z: isGuard ? 48 + Math.random() * 6 : 38 + Math.random() * 6,
+      // 盾卫守在门前三岔路口，弓箭手站在门楼木栈道与两侧高台
+      x: isGuard ? 72 + Math.random() * 5 : (Math.random() < 0.5 ? 78 : 88) + (Math.random() * 3 - 1.5),
+      z: isGuard ? 45 + Math.random() * 6 : 18 + Math.random() * 6,
       hp: isGuard ? 850 : 350, maxHp: isGuard ? 850 : 350,
-      range: isGuard ? 10 : 85, dmg: isGuard ? 45 : 38,
-      cdMax: isGuard ? 0.45 : 0.85, cd: 0,
-      animTime: Math.random() * 10, isAttacking: false
+      range: isGuard ? 9 : 65, dmg: isGuard ? 45 : 36,
+      cdMax: isGuard ? 0.6 : 0.9, cd: 0,
+      animTime: Math.random() * 6, action: "idle"
     });
   }
 
-  function spawnSwarm(count, speedMul = 1.0) {
+  function spawnWaveEnemies(count) {
     for (let i = 0; i < count; i++) {
-      const rid = Math.floor(Math.random() * paths.length);
+      const rid = i % paths.length;
       const r = paths[rid];
-      const offset = (Math.random() - 0.5) * 6;
+      const lateralJitter = (Math.random() - 0.5) * 3;
       enemies.push({
-        type: (Math.random() < 0.2 && S.wave >= 4) ? "brute" : "grunt",
-        r, rid, seg: 0, progress: -Math.random() * 12,
-        x: r[0].x, z: r[0].z + offset,
-        hp: 180, maxHp: 180,
-        spd: (8 + Math.random() * 4) * speedMul,
+        type: (Math.random() < 0.25 && S.wave >= 3) ? "brute" : "grunt",
+        r, rid, seg: 0, progress: -(i * 2.2), // 错开行军队形，绝不重叠
+        x: r[0].x, z: r[0].z + lateralJitter,
+        hp: 200, maxHp: 200,
+        spd: 4.8 + Math.random() * 1.0, // 降至沉稳合理的行军速度，杜绝失控
         dmg: 8, cd: 0, dead: false,
-        animTime: Math.random() * 10, isAttacking: false
+        animTime: Math.random() * 6, action: "walk"
       });
     }
   }
 
-  for (let i = 0; i < 4; i++) spawnSoldier("Guard");
+  // 初始守军配置
+  for (let i = 0; i < 3; i++) spawnSoldier("Guard");
   for (let i = 0; i < 3; i++) spawnSoldier("Archer");
 
   startBtn.onclick = () => {
@@ -211,16 +217,17 @@
   function triggerWave() {
     if (S.wave >= S.totalWaves) return;
     S.wave++;
-    const swarmCount = 25 + S.wave * 4;
-    spawnSwarm(swarmCount, 1.0 + S.wave * 0.03);
+    // 每波 12 ~ 24 只，排布成清晰有序的攻城阵列
+    const waveCount = 10 + S.wave * 2;
+    spawnWaveEnemies(waveCount);
 
-    waveMsg.textContent = `🚨 Wave ${S.wave} Advancing! (${swarmCount} Enemies)`;
+    waveMsg.textContent = `🚨 Wave ${S.wave} Advancing! (${waveCount} Enemies)`;
     waveMsg.classList.add("show");
     setTimeout(() => waveMsg.classList.remove("show"), 2200);
-    S.spawnCd = 12.0;
+    S.spawnCd = 13.0;
   }
 
-  /* ==================== 技能释放 ==================== */
+  /* ==================== 技能交互 ==================== */
   $("dock").addEventListener("click", e => {
     const btn = e.target.closest("button");
     if (!btn) return;
@@ -240,15 +247,15 @@
     const p = s2w(e.clientX, e.clientY);
     if (S.pending === "Oil") {
       S.items.Oil--;
-      oils.push({ x: p.x, z: p.z, r: 28, life: 6.0, tick: 0.2 });
-      S.shake = 0.35;
+      oils.push({ x: p.x, z: p.z, r: 24, life: 6.0, tick: 0.25 });
+      S.shake = 0.3;
       playSfx("flame");
-      for (let i = 0; i < 35; i++) {
-        particles.push({ x: p.x, z: p.z, vx: (Math.random()-0.5)*40, vz: (Math.random()-0.5)*40, life: 0.7, max: 0.7, color: "#f97316" });
+      for (let i = 0; i < 30; i++) {
+        particles.push({ x: p.x, z: p.z, vx: (Math.random()-0.5)*35, vz: (Math.random()-0.5)*35, life: 0.6, max: 0.6, color: "#f97316" });
       }
     } else if (S.pending === "Barricade") {
       S.items.Barricade--;
-      blocks.push({ x: p.x, z: p.z, hp: 900, maxHp: 900, life: 40 });
+      blocks.push({ x: p.x, z: p.z, hp: 800, maxHp: 800, life: 45 });
       playSfx("hit");
     }
     S.pending = null;
@@ -256,7 +263,7 @@
     updateUI();
   });
 
-  /* ==================== 帧更新循环 ==================== */
+  /* ==================== 物理与战斗逻辑 ==================== */
   function update(dt) {
     if (!S.started || S.gameOver) return;
     S.time += dt;
@@ -264,71 +271,78 @@
     S.spawnCd -= dt;
     if (S.spawnCd <= 0) triggerWave();
 
-    // 烈焰火海
+    // 烈焰风暴
     for (let i = oils.length - 1; i >= 0; i--) {
       const o = oils[i];
       o.life -= dt; o.tick -= dt;
       if (o.tick <= 0) {
-        o.tick = 0.2;
+        o.tick = 0.25;
         for (const en of enemies) {
           if (!en.dead && dist(en, o) <= o.r) {
-            en.hp -= 40;
-            if (Math.random() < 0.25) texts.push({ x: en.x, z: en.z, txt: "-40", color: "#f97316", life: 0.35 });
+            en.hp -= 42;
+            texts.push({ x: en.x, z: en.z, txt: "-42", color: "#f97316", life: 0.35 });
           }
         }
       }
       if (o.life <= 0) oils.splice(i, 1);
     }
 
-    // 怪物移动与攻击
+    // 怪物移动
     for (const en of enemies) {
       if (en.dead) continue;
       en.cd -= dt;
-      en.animTime += dt * 6;
-      en.isAttacking = false;
 
-      let nearHero = null, heroDist = 999;
+      // 攻击阻挡的盾卫
+      let targetSol = null, minD = 999;
       for (const sol of soldiers) {
         const d = dist(en, sol);
-        if (d < heroDist) { heroDist = d; nearHero = sol; }
+        if (d < minD) { minD = d; targetSol = sol; }
       }
-      if (nearHero && heroDist < 6) {
-        en.isAttacking = true;
-        if (en.cd <= 0) {
-          en.cd = 0.8;
-          nearHero.hp -= en.dmg;
-          playSfx("hit");
-          texts.push({ x: nearHero.x, z: nearHero.z, txt: `-${en.dmg}`, color: "#f87171", life: 0.3 });
-        }
-        continue;
-      }
-
-      let nearBlock = null;
-      for (const blk of blocks) {
-        if (dist(en, blk) < 7) { nearBlock = blk; break; }
-      }
-      if (nearBlock) {
-        en.isAttacking = true;
-        if (en.cd <= 0) {
-          en.cd = 0.8;
-          nearBlock.hp -= en.dmg * 2;
-          playSfx("hit");
-          if (nearBlock.hp <= 0) playSfx("heavy");
-        }
-        continue;
-      }
-
-      if (en.x > 62 && en.z < 49) {
-        en.isAttacking = true;
+      if (targetSol && minD < 6.5) {
+        en.action = "attack";
+        en.animTime += dt * 5;
         if (en.cd <= 0) {
           en.cd = 0.9;
-          S.gateHp -= en.dmg * 1.5;
+          targetSol.hp -= en.dmg;
+          playSfx("hit");
+          texts.push({ x: targetSol.x, z: targetSol.z, txt: `-${en.dmg}`, color: "#f87171", life: 0.3 });
+        }
+        continue;
+      }
+
+      // 攻击路障
+      let targetBlk = null;
+      for (const blk of blocks) {
+        if (dist(en, blk) < 6.5) { targetBlk = blk; break; }
+      }
+      if (targetBlk) {
+        en.action = "attack";
+        en.animTime += dt * 5;
+        if (en.cd <= 0) {
+          en.cd = 0.9;
+          targetBlk.hp -= en.dmg * 2;
+          playSfx("hit");
+          if (targetBlk.hp <= 0) playSfx("heavy");
+        }
+        continue;
+      }
+
+      // 攻击大门
+      if (dist(en, gateLoc) < 8.0) {
+        en.action = "attack";
+        en.animTime += dt * 5;
+        if (en.cd <= 0) {
+          en.cd = 1.0;
+          S.gateHp -= en.dmg * 2;
           S.shake = 0.12;
           playSfx("gateHit");
         }
         continue;
       }
 
+      // 行走寻路
+      en.action = "walk";
+      en.animTime += dt * 5;
       const r = en.r, p0 = r[en.seg], p1 = r[Math.min(r.length - 1, en.seg + 1)];
       const segLen = dist(p0, p1) || 1;
       en.progress += en.spd * dt;
@@ -343,21 +357,24 @@
     // 守军与弓箭手
     for (const sol of soldiers) {
       sol.cd -= dt;
-      sol.animTime += dt * 6;
-      sol.isAttacking = false;
-      if (sol.cd > 0) continue;
+      sol.animTime += dt * 4;
 
       if (sol.type === "Guard") {
+        let fighting = false;
         for (const en of enemies) {
           if (!en.dead && dist(sol, en) < sol.range) {
-            sol.isAttacking = true;
-            sol.cd = sol.cdMax;
-            en.hp -= sol.dmg;
-            playSfx("hit");
-            texts.push({ x: en.x, z: en.z, txt: `-${sol.dmg}`, color: "#38bdf8", life: 0.3 });
+            fighting = true;
+            sol.action = "attack";
+            if (sol.cd <= 0) {
+              sol.cd = sol.cdMax;
+              en.hp -= sol.dmg;
+              playSfx("hit");
+              texts.push({ x: en.x, z: en.z, txt: `-${sol.dmg}`, color: "#38bdf8", life: 0.3 });
+            }
             break;
           }
         }
+        if (!fighting) sol.action = "idle";
       } else if (sol.type === "Archer") {
         let target = null, bestD = sol.range;
         for (const en of enemies) {
@@ -366,19 +383,23 @@
           if (d < bestD) { bestD = d; target = en; }
         }
         if (target) {
-          sol.isAttacking = true;
-          sol.cd = sol.cdMax;
-          shots.push({ ax: sol.x, az: sol.z, bx: target.x, bz: target.z, life: 0.25, max: 0.25 });
-          playSfx("bow");
-          let pierce = 0;
-          for (const en of enemies) {
-            if (!en.dead && dist(en, target) < 14) {
-              en.hp -= sol.dmg;
-              texts.push({ x: en.x, z: en.z, txt: `-${sol.dmg}`, color: "#fde047", life: 0.3 });
-              pierce++;
-              if (pierce >= 4) break;
+          sol.action = "attack";
+          if (sol.cd <= 0) {
+            sol.cd = sol.cdMax;
+            shots.push({ ax: sol.x, az: sol.z, bx: target.x, bz: target.z, life: 0.22, max: 0.22 });
+            playSfx("bow");
+            let pierce = 0;
+            for (const en of enemies) {
+              if (!en.dead && dist(en, target) < 10) {
+                en.hp -= sol.dmg;
+                texts.push({ x: en.x, z: en.z, txt: `-${sol.dmg}`, color: "#fde047", life: 0.3 });
+                pierce++;
+                if (pierce >= 3) break;
+              }
             }
           }
+        } else {
+          sol.action = "idle";
         }
       }
     }
@@ -389,7 +410,7 @@
       if (en.hp <= 0) {
         S.kills++;
         for (let p = 0; p < 4; p++) {
-          particles.push({ x: en.x, z: en.z, vx: (Math.random()-0.5)*20, vz: (Math.random()-0.5)*20, life: 0.4, max: 0.4, color: "#ef4444" });
+          particles.push({ x: en.x, z: en.z, vx: (Math.random()-0.5)*18, vz: (Math.random()-0.5)*18, life: 0.35, max: 0.35, color: "#ef4444" });
         }
         enemies.splice(i, 1);
       }
@@ -414,8 +435,8 @@
     playSfx(win ? "victory" : "defeat");
     result.innerHTML = `<div class="resCard">
       <h2>${win ? "VICTORY!" : "DEFEAT"}</h2>
-      <p style="font-size:22px;margin:8px 0">${win ? "The fortress held against the unending tide!" : "The gate was breached by the swarm!"}</p>
-      <p>Total Kills: <b>${S.kills}</b> | Waves Cleared: <b>${S.wave}/15</b></p>
+      <p style="font-size:20px;margin:8px 0">${win ? "The gate held strong against all assaults!" : "The wooden gate was breached!"}</p>
+      <p>Kills: <b>${S.kills}</b> | Waves: <b>${S.wave}/15</b></p>
       <button onclick="location.reload()">Play Again</button>
     </div>`;
     result.classList.add("show");
@@ -438,100 +459,82 @@
     $("cBarricade").textContent = "x" + S.items.Barricade;
   }
 
-  /* ==================== 智能角色动作切片渲染引擎 ==================== */
-  function drawUnitSprite(ctx, asset, u, p) {
+  /* ==================== 平稳序列帧切片绘制 (杜绝断帧抽搐) ==================== */
+  function drawSpriteUnit(ctx, asset, u, p) {
     const img = asset.img;
     const nw = img.naturalWidth, nh = img.naturalHeight;
     if (!nw || !nh) return false;
 
-    // 自适应网格行列判断（兼容单行条形图与多行多列动作大图）
+    // 判定网格行列
     let cols = 6, rows = 1;
-    if (nw / nh > 3) {
-      // 极宽图：单行动作表（如 6 帧或 8 帧）
-      cols = nw > 1500 ? 8 : 6;
+    if (nw / nh > 2.8) {
+      cols = nw > 1600 ? 8 : 6;
       rows = 1;
-    } else if (nw / nh > 1.2) {
-      // 宽矩形图：多行动作大图（常见 6 列 5 行，分别为待机/跑/攻击/受击/倒地）
-      cols = 6;
-      rows = 5;
+    } else if (nw / nh > 1.1) {
+      cols = 6; rows = 5;
     } else {
-      // 接近正方形图或多宫格
-      cols = 4;
-      rows = 4;
+      cols = 4; rows = 4;
     }
 
     const sw = nw / cols;
     const sh = nh / rows;
-    const frameIdx = Math.floor(u.animTime) % cols;
-    // 如果在攻击则选用第 2 行，否则行走选用第 1 行或第 0 行
-    const rowIdx = rows > 1 ? (u.isAttacking ? Math.min(2, rows - 1) : Math.min(1, rows - 1)) : 0;
 
-    const sx = frameIdx * sw;
-    const sy = rowIdx * sh;
+    // 锁定行号：移动=第1行，攻击=第2行，待机=第0行
+    let rIdx = 0;
+    if (rows > 1) {
+      if (u.action === "attack") rIdx = Math.min(2, rows - 1);
+      else if (u.action === "walk") rIdx = Math.min(1, rows - 1);
+      else rIdx = 0;
+    }
 
-    // 绘制尺寸
-    const dw = 42 * (u.type === "brute" ? 1.4 : 1.0);
+    const frame = Math.floor(u.animTime) % cols;
+    const sx = frame * sw;
+    const sy = rIdx * sh;
+
+    // 贴合透视的适度显示尺寸
+    const dw = 32 * (u.type === "brute" ? 1.3 : 0.95);
     const dh = dw * (sh / sw);
 
-    ctx.drawImage(img, sx, sy, sw, sh, p.x - dw / 2, p.y - dh + 6, dw, dh);
+    ctx.drawImage(img, sx, sy, sw, sh, p.x - dw / 2, p.y - dh + 4, dw, dh);
     return true;
   }
 
   function draw() {
     ctx.save();
     if (S.shake > 0) {
-      ctx.translate((Math.random() - 0.5) * 16 * S.shake, (Math.random() - 0.5) * 16 * S.shake);
+      ctx.translate((Math.random() - 0.5) * 14 * S.shake, (Math.random() - 0.5) * 14 * S.shake);
     }
     ctx.clearRect(0, 0, view.w, view.h);
 
-    // 1. 真实背景大地图渲染
+    // 1. 绘制真实大地图背景
     if (ASSETS.bg.ready && ASSETS.bg.img.naturalWidth > 0) {
       ctx.drawImage(ASSETS.bg.img, 0, 0, view.w, view.h);
-    } else {
-      const g = ctx.createLinearGradient(0, 0, 0, view.h);
-      g.addColorStop(0, "#0a131c"); g.addColorStop(0.5, "#14221c"); g.addColorStop(1, "#1c1d15");
-      ctx.fillStyle = g; ctx.fillRect(0, 0, view.w, view.h);
-
-      ctx.strokeStyle = "rgba(75,50,30,0.75)";
-      ctx.lineWidth = view.scale * 3.4;
-      ctx.lineCap = "round"; ctx.lineJoin = "round";
-      for (const r of paths) {
-        ctx.beginPath();
-        for (let i = 0; i < r.length; i++) {
-          const p = w2s(r[i].x, r[i].z);
-          if (i === 0) ctx.moveTo(p.x, p.y); else ctx.lineTo(p.x, p.y);
-        }
-        ctx.stroke();
-      }
-      const gp = w2s(gate.x, gate.z);
-      ctx.fillStyle = "#1e1610"; ctx.fillRect(gp.x - 24, gp.y - 50, 48, 60);
-      ctx.fillStyle = "#5c3d24"; ctx.fillRect(gp.x - 18, gp.y - 45, 36, 55);
     }
 
     // 2. 烈焰火海
     for (const o of oils) {
       const p = w2s(o.x, o.z);
-      ctx.fillStyle = "rgba(234,88,12,0.4)";
-      ctx.beginPath(); ctx.ellipse(p.x, p.y, o.r * view.scale * 0.4, o.r * view.scale * 0.2, 0, 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = "rgba(251,146,60,0.8)";
-      ctx.beginPath(); ctx.ellipse(p.x, p.y, o.r * view.scale * 0.2, o.r * view.scale * 0.1, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = "rgba(234,88,12,0.35)";
+      ctx.beginPath(); ctx.ellipse(p.x, p.y, o.r * view.scale * 0.35, o.r * view.scale * 0.18, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = "rgba(251,146,60,0.75)";
+      ctx.beginPath(); ctx.ellipse(p.x, p.y, o.r * view.scale * 0.18, o.r * view.scale * 0.09, 0, 0, Math.PI * 2); ctx.fill();
     }
 
     // 3. 木桩路障
     for (const b of blocks) {
       const p = w2s(b.x, b.z);
-      ctx.fillStyle = "#854d0e"; ctx.fillRect(p.x - 10, p.y - 12, 20, 16);
-      ctx.fillStyle = "#22c55e"; ctx.fillRect(p.x - 10, p.y - 16, 20 * (b.hp / b.maxHp), 3);
+      ctx.fillStyle = "#854d0e"; ctx.fillRect(p.x - 9, p.y - 10, 18, 14);
+      ctx.fillStyle = "#22c55e"; ctx.fillRect(p.x - 9, p.y - 14, 18 * (b.hp / b.maxHp), 3);
     }
 
-    // 4. 穿透箭光束
-    ctx.strokeStyle = "#fef08a"; ctx.lineWidth = 2.8;
+    // 4. 穿透箭
+    ctx.strokeStyle = "#fef08a"; ctx.lineWidth = 2.4;
     for (const s of shots) {
       const a = w2s(s.ax, s.az), b = w2s(s.bx, s.bz);
-      ctx.beginPath(); ctx.moveTo(a.x, a.y - 10); ctx.lineTo(b.x, b.y - 10); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(a.x, a.y - 8); ctx.lineTo(b.x, b.y - 8); ctx.stroke();
     }
 
-    // 5. 单位渲染 (深度排序 + 动作序列帧贴图切片)
+    // 5. 单位渲染 (透视深度排序)
     const allUnits = [
       ...soldiers.map(u => ({ u, isSol: true })),
       ...enemies.map(u => ({ u, isSol: false }))
@@ -543,37 +546,33 @@
       const asset = ASSETS[assetKey];
 
       // 地面阴影
-      ctx.fillStyle = "rgba(0,0,0,0.3)";
-      ctx.beginPath(); ctx.ellipse(p.x, p.y + 1, 9, 4, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = "rgba(0,0,0,0.35)";
+      ctx.beginPath(); ctx.ellipse(p.x, p.y + 2, 8, 3.5, 0, 0, Math.PI * 2); ctx.fill();
 
-      // 尝试自适应动作贴图绘制
-      let drawn = false;
+      let ok = false;
       if (asset && asset.ready) {
-        drawn = drawUnitSprite(ctx, asset, u, p);
+        ok = drawSpriteUnit(ctx, asset, u, p);
+      }
+      if (!ok) {
+        ctx.fillStyle = item.isSol ? "#2563eb" : "#dc2626";
+        ctx.fillRect(p.x - 5, p.y - 16, 10, 14);
       }
 
-      // 未就绪时的矢量兜底小人
-      if (!drawn) {
-        ctx.fillStyle = item.isSol ? (u.type === "Guard" ? "#2563eb" : "#0284c7") : (u.type === "brute" ? "#701a75" : "#dc2626");
-        ctx.fillRect(p.x - 6, p.y - 18, 12, 16);
-        ctx.fillStyle = "#cbd5e1"; ctx.beginPath(); ctx.arc(p.x, p.y - 21, 5, 0, Math.PI * 2); ctx.fill();
-      }
-
-      // 顶部血条
-      ctx.fillStyle = "rgba(0,0,0,0.6)"; ctx.fillRect(p.x - 8, p.y - 28, 16, 3);
+      // 简洁血条
+      ctx.fillStyle = "rgba(0,0,0,0.55)"; ctx.fillRect(p.x - 7, p.y - 24, 14, 2.5);
       ctx.fillStyle = item.isSol ? "#38bdf8" : "#ef4444";
-      ctx.fillRect(p.x - 8, p.y - 28, 16 * Math.max(0, u.hp / u.maxHp), 3);
+      ctx.fillRect(p.x - 7, p.y - 24, 14 * Math.max(0, u.hp / u.maxHp), 2.5);
     }
 
-    // 6. 粒子与伤害跳字
+    // 6. 粒子与跳字
     for (const pt of particles) {
       const p = w2s(pt.x, pt.z);
-      ctx.fillStyle = pt.color; ctx.fillRect(p.x, p.y - 8, 3, 3);
+      ctx.fillStyle = pt.color; ctx.fillRect(p.x, p.y - 6, 2.5, 2.5);
     }
-    ctx.font = "900 12px Segoe UI"; ctx.textAlign = "center";
+    ctx.font = "900 11px Segoe UI"; ctx.textAlign = "center";
     for (const txt of texts) {
       const p = w2s(txt.x, txt.z);
-      ctx.fillStyle = txt.color; ctx.fillText(txt.txt, p.x, p.y - 18);
+      ctx.fillStyle = txt.color; ctx.fillText(txt.txt, p.x, p.y - 16);
     }
 
     ctx.restore();
