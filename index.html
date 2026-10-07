@@ -1,10 +1,19 @@
 <!DOCTYPE html>
-<!-- Lilith Defense 1-1 - Calibrated Motion & Real Path Edition -->
+<!-- ========================================================
+  PROJECT: Lilith Defense 1-1
+  VERSION: v1.2.0-fx-asset-overhaul
+  DATE: 2026-10-07
+  CHANGES:
+    - Real asset integration for Barricade / Spike Trap
+    - Multi-layered procedural & sprite flame system
+    - Archer tower position anchor fixes
+    - Semantic version tracker for safe rollbacks
+======================================================== -->
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <title>Lilith Defense 1-1</title>
+  <title>Lilith Defense 1-1 (v1.2.0)</title>
   <style>
     :root{--gold:#b88432;--ink:#251b13}
     html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#0d1822;font-family:"Segoe UI",Arial,sans-serif;touch-action:none;color:var(--ink)}
@@ -23,6 +32,7 @@
     #dock button{position:relative;border:0;border-radius:15px;background:linear-gradient(180deg,#a98552,#7b5b37);display:grid;grid-template-rows:1fr auto;align-items:center;justify-items:center;cursor:pointer;color:#fff2d4;font-weight:800;font-size:11px}
     #dock button.active{outline:3px solid #fff28f;filter:brightness(1.15);transform:translateY(-2px)}
     .count{position:absolute;right:4px;top:4px;min-width:18px;height:15px;border-radius:8px;background:#1e1b17;color:#ffe9b5;font-size:10px;display:grid;place-items:center}
+    #versionBadge{position:absolute;right:12px;bottom:8px;z-index:5;color:rgba(255,255,255,0.4);font-size:11px;font-family:monospace;pointer-events:none}
     #waveMsg{position:absolute;left:50%;top:85px;transform:translateX(-50%);z-index:6;padding:8px 20px;border-radius:16px;background:rgba(185,28,28,.9);color:#fff;border:2px solid #fca5a5;font-size:18px;font-weight:900;opacity:0;pointer-events:none;transition:opacity .25s,transform .25s}
     #waveMsg.show{opacity:1;transform:translateX(-50%) scale(1.05)}
     #story{position:absolute;left:50%;top:48%;transform:translate(-50%,-50%);z-index:9;width:min(500px,76vw);border-radius:22px;background:linear-gradient(180deg,#fff2d1,#e5bb70);border:2px solid var(--gold);box-shadow:0 18px 42px rgba(0,0,0,.5);padding:24px;text-align:center}
@@ -49,6 +59,7 @@
     </div>
   </div>
   <div id="waveMsg"></div>
+  <div id="versionBadge">Build: v1.2.0</div>
   <div id="dock">
     <button data-action="CallGuard"><span>🛡</span>Guard<span class="count" id="cGuard">x5</span></button>
     <button data-action="CallArcher"><span>🏹</span>Archer<span class="count" id="cArcher">x5</span></button>
@@ -66,11 +77,12 @@
 <script>
 (() => {
   "use strict";
+  const CURRENT_BUILD = "v1.2.0-fx-asset-overhaul";
   const $ = id => document.getElementById(id);
   const canvas = $("game"), ctx = canvas.getContext("2d");
   const waveMsg = $("waveMsg"), story = $("story"), startBtn = $("startBtn"), result = $("result");
 
-  /* ==================== 原版战斗音效 (无BGM) ==================== */
+  /* ==================== 战斗打击音效 (无BGM) ==================== */
   let audioCtx = null;
   const lastSfx = {};
   function initAudio() {
@@ -111,42 +123,45 @@
     else if (k === "defeat") { tone(160, 0.28, "triangle", 0.05, 0); tone(110, 0.4, "sine", 0.05, 0.16); }
   }
 
-  /* ==================== 真实美术素材挂载 ==================== */
+  /* ==================== 资源全链路加载系统 ==================== */
   const ASSETS = {
     bg: { img: new Image(), ready: false },
     guard: { img: new Image(), ready: false },
     archer: { img: new Image(), ready: false },
     grunt: { img: new Image(), ready: false },
-    brute: { img: new Image(), ready: false }
+    brute: { img: new Image(), ready: false },
+    barricade: { img: new Image(), ready: false },
+    flame: { img: new Image(), ready: false }
   };
 
   ASSETS.bg.img.onload = () => { ASSETS.bg.ready = true; };
   ASSETS.bg.img.src = "assets/stage_real_25d_battlefield_right_gate_v39_full_rebuild.png";
 
-  function registerAnim(key, primary, fallback) {
+  function registerAsset(key, paths) {
     const item = ASSETS[key];
-    item.img.onload = () => { item.ready = true; };
-    item.img.onerror = () => {
-      if (fallback && item.img.src !== fallback) item.img.src = fallback;
-    };
-    item.img.src = primary;
+    let pIdx = 0;
+    function tryNext() {
+      if (pIdx >= paths.length) return;
+      const src = paths[pIdx++];
+      item.img.onload = () => { item.ready = true; };
+      item.img.onerror = () => { tryNext(); };
+      item.img.src = src;
+    }
+    tryNext();
   }
-  registerAnim("guard", "assets/animations/guard_actions.png", "assets/guard_anim.png");
-  registerAnim("archer", "assets/animations/archer_actions.png", "assets/archer_actions.png");
-  registerAnim("grunt", "assets/animations/grunt_actions.png", "assets/grunt_actions.png");
-  registerAnim("brute", "assets/animations/brute_actions.png", "assets/brute_actions.png");
 
-  /* ==================== 完美贴合大地图的车辙路径 ==================== */
-  // 大门真实像素坐标 (右侧大木门前三岔汇聚点)
+  registerAsset("guard", ["assets/animations/guard_actions.png", "assets/guard_anim.png"]);
+  registerAsset("archer", ["assets/animations/archer_actions.png", "assets/archer_actions.png"]);
+  registerAsset("grunt", ["assets/animations/grunt_actions.png", "assets/grunt_actions.png"]);
+  registerAsset("brute", ["assets/animations/brute_actions.png", "assets/brute_actions.png"]);
+  registerAsset("barricade", ["assets/barricade.png", "assets/animations/barricade.png", "assets/props/barricade.png", "assets/spike.png"]);
+  registerAsset("flame", ["assets/flame.png", "assets/animations/flame.png", "assets/fx/flame.png", "assets/fire.png"]);
+
+  /* ==================== 真实路径与大门锚点 ==================== */
   const gateLoc = { x: 84, z: 27 };
-
-  // 1:1 对齐地图背景上的三条真实泥土车辙
   const paths = [
-    // 上路：从左上山路弯延向右，经过木桩防线汇聚到门前
     [{x: 1, z: 22}, {x: 14, z: 28}, {x: 28, z: 37}, {x: 42, z: 42}, {x: 58, z: 40}, {x: 72, z: 48}, {x: 84, z: 32}, {x: 84, z: 27}],
-    // 中路：从左侧中部车辙平直推进，经过中间草丘汇入
     [{x: 1, z: 48}, {x: 16, z: 50}, {x: 33, z: 48}, {x: 48, z: 45}, {x: 62, z: 46}, {x: 74, z: 53}, {x: 84, z: 35}, {x: 84, z: 27}],
-    // 下路：从左下坡道向右上延伸，经过大板车，汇聚到十字路口
     [{x: 18, z: 88}, {x: 32, z: 74}, {x: 44, z: 63}, {x: 56, z: 58}, {x: 70, z: 56}, {x: 80, z: 45}, {x: 84, z: 27}]
   ];
 
@@ -171,16 +186,17 @@
   function s2w(x, y) { return { x: Math.max(0, Math.min(100, x / view.w * 100)), z: Math.max(0, Math.min(100, y / view.h * 100)) }; }
   function dist(a, b) { return Math.hypot(a.x - b.x, a.z - b.z); }
 
-  /* ==================== 兵种生成与驻守位置校准 ==================== */
+  /* ==================== 守军站位（箭塔精确锚定） ==================== */
   function spawnSoldier(type) {
     const isGuard = type === "Guard";
+    // 弓箭手精准锚定在两侧木箭塔射击平台（左塔 x:66 z:12，右塔 x:93 z:13）
+    const isLeftTower = Math.random() < 0.5;
     soldiers.push({
       type,
-      // 盾卫守在门前三岔路口，弓箭手站在门楼木栈道与两侧高台
-      x: isGuard ? 72 + Math.random() * 5 : (Math.random() < 0.5 ? 78 : 88) + (Math.random() * 3 - 1.5),
-      z: isGuard ? 45 + Math.random() * 6 : 18 + Math.random() * 6,
+      x: isGuard ? (70 + Math.random() * 6) : (isLeftTower ? 65.5 + Math.random()*2 : 92.5 + Math.random()*2),
+      z: isGuard ? (44 + Math.random() * 6) : (11.5 + Math.random() * 3),
       hp: isGuard ? 850 : 350, maxHp: isGuard ? 850 : 350,
-      range: isGuard ? 9 : 65, dmg: isGuard ? 45 : 36,
+      range: isGuard ? 9 : 75, dmg: isGuard ? 45 : 36,
       cdMax: isGuard ? 0.6 : 0.9, cd: 0,
       animTime: Math.random() * 6, action: "idle"
     });
@@ -193,17 +209,16 @@
       const lateralJitter = (Math.random() - 0.5) * 3;
       enemies.push({
         type: (Math.random() < 0.25 && S.wave >= 3) ? "brute" : "grunt",
-        r, rid, seg: 0, progress: -(i * 2.2), // 错开行军队形，绝不重叠
+        r, rid, seg: 0, progress: -(i * 2.2),
         x: r[0].x, z: r[0].z + lateralJitter,
         hp: 200, maxHp: 200,
-        spd: 4.8 + Math.random() * 1.0, // 降至沉稳合理的行军速度，杜绝失控
+        spd: 4.8 + Math.random() * 1.0,
         dmg: 8, cd: 0, dead: false,
         animTime: Math.random() * 6, action: "walk"
       });
     }
   }
 
-  // 初始守军配置
   for (let i = 0; i < 3; i++) spawnSoldier("Guard");
   for (let i = 0; i < 3; i++) spawnSoldier("Archer");
 
@@ -217,17 +232,15 @@
   function triggerWave() {
     if (S.wave >= S.totalWaves) return;
     S.wave++;
-    // 每波 12 ~ 24 只，排布成清晰有序的攻城阵列
     const waveCount = 10 + S.wave * 2;
     spawnWaveEnemies(waveCount);
-
     waveMsg.textContent = `🚨 Wave ${S.wave} Advancing! (${waveCount} Enemies)`;
     waveMsg.classList.add("show");
     setTimeout(() => waveMsg.classList.remove("show"), 2200);
     S.spawnCd = 13.0;
   }
 
-  /* ==================== 技能交互 ==================== */
+  /* ==================== 技能释放交互 ==================== */
   $("dock").addEventListener("click", e => {
     const btn = e.target.closest("button");
     if (!btn) return;
@@ -247,11 +260,15 @@
     const p = s2w(e.clientX, e.clientY);
     if (S.pending === "Oil") {
       S.items.Oil--;
-      oils.push({ x: p.x, z: p.z, r: 24, life: 6.0, tick: 0.25 });
+      oils.push({ x: p.x, z: p.z, r: 22, life: 6.5, tick: 0.25, animTime: 0 });
       S.shake = 0.3;
       playSfx("flame");
-      for (let i = 0; i < 30; i++) {
-        particles.push({ x: p.x, z: p.z, vx: (Math.random()-0.5)*35, vz: (Math.random()-0.5)*35, life: 0.6, max: 0.6, color: "#f97316" });
+      for (let i = 0; i < 35; i++) {
+        particles.push({
+          x: p.x + (Math.random()-0.5)*18, z: p.z + (Math.random()-0.5)*10,
+          vx: (Math.random()-0.5)*12, vz: -(Math.random()*16 + 8),
+          life: 0.5 + Math.random()*0.4, max: 0.9, color: Math.random() < 0.6 ? "#ea580c" : "#facc15"
+        });
       }
     } else if (S.pending === "Barricade") {
       S.items.Barricade--;
@@ -263,7 +280,7 @@
     updateUI();
   });
 
-  /* ==================== 物理与战斗逻辑 ==================== */
+  /* ==================== 物理与战斗状态逻辑 ==================== */
   function update(dt) {
     if (!S.started || S.gameOver) return;
     S.time += dt;
@@ -274,7 +291,16 @@
     // 烈焰风暴
     for (let i = oils.length - 1; i >= 0; i--) {
       const o = oils[i];
-      o.life -= dt; o.tick -= dt;
+      o.life -= dt; o.tick -= dt; o.animTime += dt * 8;
+      // 动态产生升腾火舌
+      if (Math.random() < 0.45) {
+        particles.push({
+          x: o.x + (Math.random()-0.5)*o.r*1.2,
+          z: o.z + (Math.random()-0.5)*o.r*0.6,
+          vx: (Math.random()-0.5)*8, vz: -(Math.random()*15 + 10),
+          life: 0.45, max: 0.45, color: Math.random() < 0.5 ? "#f97316" : "#fbbf24"
+        });
+      }
       if (o.tick <= 0) {
         o.tick = 0.25;
         for (const en of enemies) {
@@ -287,41 +313,35 @@
       if (o.life <= 0) oils.splice(i, 1);
     }
 
-    // 怪物移动
+    // 怪物移动与攻击
     for (const en of enemies) {
       if (en.dead) continue;
       en.cd -= dt;
 
-      // 攻击阻挡的盾卫
+      // 盾卫阻挡
       let targetSol = null, minD = 999;
       for (const sol of soldiers) {
         const d = dist(en, sol);
         if (d < minD) { minD = d; targetSol = sol; }
       }
       if (targetSol && minD < 6.5) {
-        en.action = "attack";
-        en.animTime += dt * 5;
+        en.action = "attack"; en.animTime += dt * 5;
         if (en.cd <= 0) {
-          en.cd = 0.9;
-          targetSol.hp -= en.dmg;
-          playSfx("hit");
+          en.cd = 0.9; targetSol.hp -= en.dmg; playSfx("hit");
           texts.push({ x: targetSol.x, z: targetSol.z, txt: `-${en.dmg}`, color: "#f87171", life: 0.3 });
         }
         continue;
       }
 
-      // 攻击路障
+      // 木桩阻挡
       let targetBlk = null;
       for (const blk of blocks) {
         if (dist(en, blk) < 6.5) { targetBlk = blk; break; }
       }
       if (targetBlk) {
-        en.action = "attack";
-        en.animTime += dt * 5;
+        en.action = "attack"; en.animTime += dt * 5;
         if (en.cd <= 0) {
-          en.cd = 0.9;
-          targetBlk.hp -= en.dmg * 2;
-          playSfx("hit");
+          en.cd = 0.9; targetBlk.hp -= en.dmg * 2; playSfx("hit");
           if (targetBlk.hp <= 0) playSfx("heavy");
         }
         continue;
@@ -329,20 +349,15 @@
 
       // 攻击大门
       if (dist(en, gateLoc) < 8.0) {
-        en.action = "attack";
-        en.animTime += dt * 5;
+        en.action = "attack"; en.animTime += dt * 5;
         if (en.cd <= 0) {
-          en.cd = 1.0;
-          S.gateHp -= en.dmg * 2;
-          S.shake = 0.12;
-          playSfx("gateHit");
+          en.cd = 1.0; S.gateHp -= en.dmg * 2; S.shake = 0.12; playSfx("gateHit");
         }
         continue;
       }
 
-      // 行走寻路
-      en.action = "walk";
-      en.animTime += dt * 5;
+      // 行军
+      en.action = "walk"; en.animTime += dt * 5;
       const r = en.r, p0 = r[en.seg], p1 = r[Math.min(r.length - 1, en.seg + 1)];
       const segLen = dist(p0, p1) || 1;
       en.progress += en.spd * dt;
@@ -356,19 +371,14 @@
 
     // 守军与弓箭手
     for (const sol of soldiers) {
-      sol.cd -= dt;
-      sol.animTime += dt * 4;
-
+      sol.cd -= dt; sol.animTime += dt * 4;
       if (sol.type === "Guard") {
         let fighting = false;
         for (const en of enemies) {
           if (!en.dead && dist(sol, en) < sol.range) {
-            fighting = true;
-            sol.action = "attack";
+            fighting = true; sol.action = "attack";
             if (sol.cd <= 0) {
-              sol.cd = sol.cdMax;
-              en.hp -= sol.dmg;
-              playSfx("hit");
+              sol.cd = sol.cdMax; en.hp -= sol.dmg; playSfx("hit");
               texts.push({ x: en.x, z: en.z, txt: `-${sol.dmg}`, color: "#38bdf8", life: 0.3 });
             }
             break;
@@ -404,7 +414,7 @@
       }
     }
 
-    // 清理
+    // 死亡与清理
     for (let i = enemies.length - 1; i >= 0; i--) {
       const en = enemies[i];
       if (en.hp <= 0) {
@@ -459,17 +469,91 @@
     $("cBarricade").textContent = "x" + S.items.Barricade;
   }
 
-  /* ==================== 平稳序列帧切片绘制 (杜绝断帧抽搐) ==================== */
+  /* ==================== 深度拟真美术渲染引擎 (v1.2.0) ==================== */
+  // 1. 真实木桩拒马绘制
+  function drawBarricadeProp(ctx, b) {
+    const p = w2s(b.x, b.z);
+    const asset = ASSETS.barricade;
+    if (asset && asset.ready && asset.img.naturalWidth > 0) {
+      const w = 36, h = 36 * (asset.img.naturalHeight / asset.img.naturalWidth);
+      ctx.drawImage(asset.img, p.x - w / 2, p.y - h + 4, w, h);
+    } else {
+      // 拟真 2.5D 交叉削尖木桩拒马（替换简易方块）
+      ctx.save();
+      // 投影
+      ctx.fillStyle = "rgba(0,0,0,0.38)";
+      ctx.beginPath(); ctx.ellipse(p.x, p.y + 2, 14, 5, 0, 0, Math.PI * 2); ctx.fill();
+
+      // 交叉削尖主木
+      ctx.lineWidth = 4.5;
+      ctx.lineCap = "round";
+      ctx.strokeStyle = "#452a17";
+      ctx.beginPath(); ctx.moveTo(p.x - 11, p.y - 14); ctx.lineTo(p.x + 11, p.y + 2); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(p.x + 11, p.y - 14); ctx.lineTo(p.x - 11, p.y + 2); ctx.stroke();
+      ctx.strokeStyle = "#7c4a24";
+      ctx.beginPath(); ctx.moveTo(p.x - 10, p.y - 13); ctx.lineTo(p.x + 10, p.y + 1); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(p.x + 10, p.y - 13); ctx.lineTo(p.x - 10, p.y + 1); ctx.stroke();
+
+      // 横木与铁丝加固箍
+      ctx.strokeStyle = "#9a6234"; ctx.lineWidth = 3.5;
+      ctx.beginPath(); ctx.moveTo(p.x - 13, p.y - 6); ctx.lineTo(p.x + 13, p.y - 6); ctx.stroke();
+      ctx.strokeStyle = "#374151"; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.arc(p.x, p.y - 6, 3, 0, Math.PI * 2); ctx.stroke();
+      ctx.restore();
+    }
+    // 血条
+    ctx.fillStyle = "rgba(0,0,0,0.6)"; ctx.fillRect(p.x - 10, p.y - 20, 20, 3);
+    ctx.fillStyle = "#22c55e"; ctx.fillRect(p.x - 10, p.y - 20, 20 * (b.hp / b.maxHp), 3);
+  }
+
+  // 2. 真实多层烈焰风暴绘制
+  function drawFlameZone(ctx, o) {
+    const p = w2s(o.x, o.z);
+    const rw = o.r * view.scale * 0.42;
+    const rh = o.r * view.scale * 0.22;
+    const asset = ASSETS.flame;
+
+    if (asset && asset.ready && asset.img.naturalWidth > 0) {
+      const fCols = 6;
+      const f = Math.floor(o.animTime) % fCols;
+      const sw = asset.img.naturalWidth / fCols;
+      const sh = asset.img.naturalHeight;
+      const dw = rw * 2.2;
+      const dh = dw * (sh / sw);
+      ctx.drawImage(asset.img, f * sw, 0, sw, sh, p.x - dw / 2, p.y - dh * 0.75, dw, dh);
+    } else {
+      // 拟真多层热浪、地面焦痕与烈火漫反射（替换平淡橙圈）
+      ctx.save();
+      // 地表高温焦黑底痕
+      ctx.fillStyle = "rgba(10, 5, 2, 0.55)";
+      ctx.beginPath(); ctx.ellipse(p.x, p.y, rw * 1.05, rh * 1.05, 0, 0, Math.PI * 2); ctx.fill();
+
+      // 火海漫反射光晕
+      const grad = ctx.createRadialGradient(p.x, p.y, 4, p.x, p.y, rw);
+      grad.addColorStop(0, "rgba(254, 240, 138, 0.75)");
+      grad.addColorStop(0.35, "rgba(249, 115, 22, 0.65)");
+      grad.addColorStop(0.75, "rgba(185, 28, 28, 0.35)");
+      grad.addColorStop(1, "rgba(153, 27, 27, 0)");
+      ctx.fillStyle = grad;
+      ctx.beginPath(); ctx.ellipse(p.x, p.y, rw, rh, 0, 0, Math.PI * 2); ctx.fill();
+
+      // 核心热焰跳动圈
+      const pulse = 1.0 + Math.sin(o.animTime * 1.5) * 0.08;
+      ctx.fillStyle = "rgba(255, 251, 235, 0.85)";
+      ctx.beginPath(); ctx.ellipse(p.x, p.y - 2, rw * 0.32 * pulse, rh * 0.32 * pulse, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+    }
+  }
+
+  // 3. 角色动作帧自适应切片
   function drawSpriteUnit(ctx, asset, u, p) {
     const img = asset.img;
     const nw = img.naturalWidth, nh = img.naturalHeight;
     if (!nw || !nh) return false;
 
-    // 判定网格行列
     let cols = 6, rows = 1;
     if (nw / nh > 2.8) {
-      cols = nw > 1600 ? 8 : 6;
-      rows = 1;
+      cols = nw > 1600 ? 8 : 6; rows = 1;
     } else if (nw / nh > 1.1) {
       cols = 6; rows = 5;
     } else {
@@ -479,7 +563,6 @@
     const sw = nw / cols;
     const sh = nh / rows;
 
-    // 锁定行号：移动=第1行，攻击=第2行，待机=第0行
     let rIdx = 0;
     if (rows > 1) {
       if (u.action === "attack") rIdx = Math.min(2, rows - 1);
@@ -490,8 +573,6 @@
     const frame = Math.floor(u.animTime) % cols;
     const sx = frame * sw;
     const sy = rIdx * sh;
-
-    // 贴合透视的适度显示尺寸
     const dw = 32 * (u.type === "brute" ? 1.3 : 0.95);
     const dh = dw * (sh / sw);
 
@@ -499,6 +580,7 @@
     return true;
   }
 
+  /* ==================== 总主绘制循环 ==================== */
   function draw() {
     ctx.save();
     if (S.shake > 0) {
@@ -506,26 +588,16 @@
     }
     ctx.clearRect(0, 0, view.w, view.h);
 
-    // 1. 绘制真实大地图背景
+    // 1. 大地图背景
     if (ASSETS.bg.ready && ASSETS.bg.img.naturalWidth > 0) {
       ctx.drawImage(ASSETS.bg.img, 0, 0, view.w, view.h);
     }
 
-    // 2. 烈焰火海
-    for (const o of oils) {
-      const p = w2s(o.x, o.z);
-      ctx.fillStyle = "rgba(234,88,12,0.35)";
-      ctx.beginPath(); ctx.ellipse(p.x, p.y, o.r * view.scale * 0.35, o.r * view.scale * 0.18, 0, 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = "rgba(251,146,60,0.75)";
-      ctx.beginPath(); ctx.ellipse(p.x, p.y, o.r * view.scale * 0.18, o.r * view.scale * 0.09, 0, 0, Math.PI * 2); ctx.fill();
-    }
+    // 2. 真实烈焰风暴
+    for (const o of oils) drawFlameZone(ctx, o);
 
-    // 3. 木桩路障
-    for (const b of blocks) {
-      const p = w2s(b.x, b.z);
-      ctx.fillStyle = "#854d0e"; ctx.fillRect(p.x - 9, p.y - 10, 18, 14);
-      ctx.fillStyle = "#22c55e"; ctx.fillRect(p.x - 9, p.y - 14, 18 * (b.hp / b.maxHp), 3);
-    }
+    // 3. 拟真木桩拒马
+    for (const b of blocks) drawBarricadeProp(ctx, b);
 
     // 4. 穿透箭
     ctx.strokeStyle = "#fef08a"; ctx.lineWidth = 2.4;
@@ -534,7 +606,7 @@
       ctx.beginPath(); ctx.moveTo(a.x, a.y - 8); ctx.lineTo(b.x, b.y - 8); ctx.stroke();
     }
 
-    // 5. 单位渲染 (透视深度排序)
+    // 5. 单位渲染 (透视排序)
     const allUnits = [
       ...soldiers.map(u => ({ u, isSol: true })),
       ...enemies.map(u => ({ u, isSol: false }))
@@ -545,26 +617,22 @@
       const assetKey = item.isSol ? (u.type === "Guard" ? "guard" : "archer") : (u.type === "brute" ? "brute" : "grunt");
       const asset = ASSETS[assetKey];
 
-      // 地面阴影
       ctx.fillStyle = "rgba(0,0,0,0.35)";
       ctx.beginPath(); ctx.ellipse(p.x, p.y + 2, 8, 3.5, 0, 0, Math.PI * 2); ctx.fill();
 
       let ok = false;
-      if (asset && asset.ready) {
-        ok = drawSpriteUnit(ctx, asset, u, p);
-      }
+      if (asset && asset.ready) ok = drawSpriteUnit(ctx, asset, u, p);
       if (!ok) {
         ctx.fillStyle = item.isSol ? "#2563eb" : "#dc2626";
         ctx.fillRect(p.x - 5, p.y - 16, 10, 14);
       }
 
-      // 简洁血条
       ctx.fillStyle = "rgba(0,0,0,0.55)"; ctx.fillRect(p.x - 7, p.y - 24, 14, 2.5);
       ctx.fillStyle = item.isSol ? "#38bdf8" : "#ef4444";
       ctx.fillRect(p.x - 7, p.y - 24, 14 * Math.max(0, u.hp / u.maxHp), 2.5);
     }
 
-    // 6. 粒子与跳字
+    // 6. 升腾火星与暴击粒子
     for (const pt of particles) {
       const p = w2s(pt.x, pt.z);
       ctx.fillStyle = pt.color; ctx.fillRect(p.x, p.y - 6, 2.5, 2.5);
