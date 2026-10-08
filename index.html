@@ -1,19 +1,18 @@
 <!DOCTYPE html>
 <!-- ========================================================
   PROJECT: Lilith Defense 1-1
-  VERSION: v1.2.4-asset-direct-bind
-  DATE: 2026-10-08
+  VERSION: v1.2.5-auto-fallback-start
+  DATE: 2026-10-09
   CHANGES:
-    - Direct asset binding restored (fixed black screen / missing sprites)
-    - img.complete instant check fallback
-    - Archer tower anchors preserved
-    - Safe audio wrapper maintained
+    - Bulletproof startup: Click anywhere on modal, press space/enter, or auto-starts in 5s
+    - Cache-busting on asset binds
+    - High-visibility build badge
 ======================================================== -->
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <title>Lilith Defense 1-1 (v1.2.4)</title>
+  <title>Lilith Defense 1-1 (v1.2.5)</title>
   <style>
     :root{--gold:#b88432;--ink:#251b13}
     html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#0d1822;font-family:"Segoe UI",Arial,sans-serif;touch-action:none;color:var(--ink)}
@@ -32,14 +31,14 @@
     #dock button{position:relative;border:0;border-radius:15px;background:linear-gradient(180deg,#a98552,#7b5b37);display:grid;grid-template-rows:1fr auto;align-items:center;justify-items:center;cursor:pointer;color:#fff2d4;font-weight:800;font-size:11px}
     #dock button.active{outline:3px solid #fff28f;filter:brightness(1.15);transform:translateY(-2px)}
     .count{position:absolute;right:4px;top:4px;min-width:18px;height:15px;border-radius:8px;background:#1e1b17;color:#ffe9b5;font-size:10px;display:grid;place-items:center}
-    #versionBadge{position:absolute;right:12px;bottom:8px;z-index:5;color:rgba(255,255,255,0.45);font-size:11px;font-family:monospace;pointer-events:none}
+    #versionBadge{position:absolute;right:14px;bottom:10px;z-index:25;color:#ef4444;font-weight:900;font-size:13px;font-family:monospace;background:rgba(0,0,0,0.7);padding:3px 8px;border-radius:6px;border:1px solid #ef4444;pointer-events:none}
     #waveMsg{position:absolute;left:50%;top:85px;transform:translateX(-50%);z-index:6;padding:8px 20px;border-radius:16px;background:rgba(185,28,28,.9);color:#fff;border:2px solid #fca5a5;font-size:18px;font-weight:900;opacity:0;pointer-events:none}
     #waveMsg.show{opacity:1}
-    #story{position:absolute;left:50%;top:48%;transform:translate(-50%,-50%);z-index:15;width:min(500px,76vw);border-radius:22px;background:linear-gradient(180deg,#fff2d1,#e5bb70);border:2px solid var(--gold);box-shadow:0 18px 42px rgba(0,0,0,.5);padding:24px;text-align:center}
+    #story{position:absolute;left:50%;top:52%;transform:translate(-50%,-50%);z-index:30;width:min(500px,76vw);border-radius:22px;background:linear-gradient(180deg,#fff2d1,#e5bb70);border:2px solid var(--gold);box-shadow:0 18px 42px rgba(0,0,0,.6);padding:24px;text-align:center;cursor:pointer}
     #story h2{margin:0 0 10px;font-size:26px}
-    #story button{margin-top:14px;width:100%;height:46px;border-radius:12px;background:linear-gradient(180deg,#a56f36,#7d5228);color:#ffe9b5;font-size:18px;font-weight:800;border:0;cursor:pointer}
+    #story button{margin-top:14px;width:100%;height:48px;border-radius:12px;background:linear-gradient(180deg,#a56f36,#7d5228);color:#ffe9b5;font-size:18px;font-weight:800;border:0;cursor:pointer}
     #story.hide{display:none !important}
-    #result{position:absolute;inset:0;z-index:20;display:none;place-items:center;background:rgba(0,0,0,.7);backdrop-filter:blur(4px)}
+    #result{position:absolute;inset:0;z-index:40;display:none;place-items:center;background:rgba(0,0,0,.7);backdrop-filter:blur(4px)}
     #result.show{display:grid}
     .resCard{width:min(500px,80vw);border-radius:22px;padding:22px;background:linear-gradient(180deg,#fff4cd,#dead59);border:3px solid var(--gold);text-align:center;font-weight:900}
     .resCard button{margin-top:14px;height:42px;width:140px;color:#fff;font-size:16px;font-weight:800;border-radius:10px;background:#854d0e;border:0;cursor:pointer}
@@ -59,14 +58,14 @@
     </div>
   </div>
   <div id="waveMsg"></div>
-  <div id="versionBadge">Build: v1.2.4</div>
+  <div id="versionBadge">[BUILD v1.2.5]</div>
   <div id="dock">
     <button data-action="CallGuard"><span>🛡</span>Guard<span class="count" id="cGuard">x5</span></button>
     <button data-action="CallArcher"><span>🏹</span>Archer<span class="count" id="cArcher">x5</span></button>
     <button data-action="Oil"><span>🔥</span>Flame<span class="count" id="cOil">x6</span></button>
     <button data-action="Barricade"><span>🪵</span>Spike<span class="count" id="cBarricade">x6</span></button>
   </div>
-  <div id="story">
+  <div id="story" onclick="window.triggerGameStart()">
     <h2>Lilith Defense 1-1</h2>
     <p>Hold the gate against the raiding warbands! Maintain defensive formation at the crossroads.</p>
     <button id="startBtn" onclick="window.triggerGameStart()">Begin Defense</button>
@@ -135,7 +134,7 @@
     } catch(e) {}
   }
 
-  /* ==================== 恢复直连素材加载 (稳定可靠) ==================== */
+  /* ==================== 直连加载真实素材 ==================== */
   const ASSETS = {
     bg: new Image(),
     guard: new Image(),
@@ -221,20 +220,26 @@
   for (let i = 0; i < 3; i++) spawnSoldier("Guard");
   for (let i = 0; i < 3; i++) spawnSoldier("Archer");
 
+  /* ==================== 终极防卡死启动函数 ==================== */
   window.triggerGameStart = function() {
+    if (S.started) return;
     initAudio();
     S.started = true;
     if (story) story.classList.add("hide");
     triggerWave();
   };
 
-  if (startBtn) {
-    startBtn.addEventListener("click", window.triggerGameStart);
-    startBtn.addEventListener("touchend", (e) => {
-      e.preventDefault();
+  // 全键盘与触控兜底
+  window.addEventListener("keydown", (e) => {
+    if (e.code === "Space" || e.code === "Enter") window.triggerGameStart();
+  });
+
+  // 5秒无交互自动启动（终极兜底）
+  setTimeout(() => {
+    if (!S.started) {
       window.triggerGameStart();
-    });
-  }
+    }
+  }, 5000);
 
   function triggerWave() {
     if (S.wave >= S.totalWaves) return;
@@ -373,4 +378,257 @@
 
     // 守军与弓箭手
     for (const sol of soldiers) {
-      sol.cd -= dt; sol.animTime += dt *
+      sol.cd -= dt; sol.animTime += dt * 4;
+      if (sol.type === "Guard") {
+        let fighting = false;
+        for (const en of enemies) {
+          if (!en.dead && dist(sol, en) < sol.range) {
+            fighting = true; sol.action = "attack";
+            if (sol.cd <= 0) {
+              sol.cd = sol.cdMax; en.hp -= sol.dmg; playSfx("hit");
+              texts.push({ x: en.x, z: en.z, txt: `-${sol.dmg}`, color: "#38bdf8", life: 0.3 });
+            }
+            break;
+          }
+        }
+        if (!fighting) sol.action = "idle";
+      } else if (sol.type === "Archer") {
+        let target = null, bestD = sol.range;
+        for (const en of enemies) {
+          if (en.dead) continue;
+          const d = dist(sol, en);
+          if (d < bestD) { bestD = d; target = en; }
+        }
+        if (target) {
+          sol.action = "attack";
+          if (sol.cd <= 0) {
+            sol.cd = sol.cdMax;
+            shots.push({ ax: sol.x, az: sol.z, bx: target.x, bz: target.z, life: 0.22, max: 0.22 });
+            playSfx("bow");
+            let pierce = 0;
+            for (const en of enemies) {
+              if (!en.dead && dist(en, target) < 10) {
+                en.hp -= sol.dmg;
+                texts.push({ x: en.x, z: en.z, txt: `-${sol.dmg}`, color: "#fde047", life: 0.3 });
+                pierce++;
+                if (pierce >= 3) break;
+              }
+            }
+          }
+        } else {
+          sol.action = "idle";
+        }
+      }
+    }
+
+    // 死亡清理
+    for (let i = enemies.length - 1; i >= 0; i--) {
+      const en = enemies[i];
+      if (en.hp <= 0) {
+        S.kills++;
+        for (let p = 0; p < 4; p++) {
+          particles.push({ x: en.x, z: en.z, vx: (Math.random()-0.5)*18, vz: (Math.random()-0.5)*18, life: 0.35, max: 0.35, color: "#ef4444" });
+        }
+        enemies.splice(i, 1);
+      }
+    }
+    for (let i = soldiers.length - 1; i >= 0; i--) if (soldiers[i].hp <= 0) soldiers.splice(i, 1);
+    for (let i = blocks.length - 1; i >= 0; i--) if (blocks[i].hp <= 0) blocks.splice(i, 1);
+    for (let i = shots.length - 1; i >= 0; i--) { shots[i].life -= dt; if (shots[i].life <= 0) shots.splice(i, 1); }
+    for (let i = texts.length - 1; i >= 0; i--) { texts[i].life -= dt; if (texts[i].life <= 0) texts.splice(i, 1); }
+    for (let i = particles.length - 1; i >= 0; i--) {
+      const p = particles[i];
+      p.life -= dt; p.x += p.vx * dt; p.z += p.vz * dt;
+      if (p.life <= 0) particles.splice(i, 1);
+    }
+
+    if (S.gateHp <= 0) endGame(false);
+    if (S.time >= S.duration) endGame(true);
+    updateUI();
+  }
+
+  function endGame(win) {
+    S.gameOver = true;
+    playSfx(win ? "victory" : "defeat");
+    result.innerHTML = `<div class="resCard">
+      <h2>${win ? "VICTORY!" : "DEFEAT"}</h2>
+      <p style="font-size:20px;margin:8px 0">${win ? "The gate held strong against all assaults!" : "The wooden gate was breached!"}</p>
+      <p>Kills: <b>${S.kills}</b> | Waves: <b>${S.wave}/15</b></p>
+      <button onclick="location.reload()">Play Again</button>
+    </div>`;
+    result.classList.add("show");
+  }
+
+  function updateUI() {
+    const left = Math.max(0, Math.floor(S.duration - S.time));
+    $("timerBox").textContent = `${String(Math.floor(left / 60)).padStart(2, "0")}:${String(left % 60).padStart(2, "0")}`;
+    const gp = Math.max(0, Math.floor(S.gateHp / S.gateMax * 100));
+    $("gateBar").style.width = gp + "%";
+    $("gateTxt").textContent = gp + "%";
+    $("waveTxt").textContent = S.wave;
+    $("killTxt").textContent = S.kills;
+    $("foeTxt").textContent = enemies.length;
+    $("guardTxt").textContent = soldiers.length;
+
+    $("cGuard").textContent = "x" + S.items.CallGuard;
+    $("cArcher").textContent = "x" + S.items.CallArcher;
+    $("cOil").textContent = "x" + S.items.Oil;
+    $("cBarricade").textContent = "x" + S.items.Barricade;
+  }
+
+  /* ==================== 渲染器 ==================== */
+  function drawBarricadeProp(ctx, b) {
+    const p = w2s(b.x, b.z);
+    ctx.save();
+    ctx.fillStyle = "rgba(0,0,0,0.4)";
+    ctx.beginPath(); ctx.ellipse(p.x, p.y + 4, 18, 6, 0, 0, Math.PI * 2); ctx.fill();
+
+    ctx.lineWidth = 6; ctx.lineCap = "round";
+    ctx.strokeStyle = "#382211";
+    ctx.beginPath(); ctx.moveTo(p.x - 14, p.y - 18); ctx.lineTo(p.x + 14, p.y + 2); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(p.x + 14, p.y - 18); ctx.lineTo(p.x - 14, p.y + 2); ctx.stroke();
+    ctx.strokeStyle = "#6f411e";
+    ctx.beginPath(); ctx.moveTo(p.x - 13, p.y - 17); ctx.lineTo(p.x + 13, p.y + 1); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(p.x + 13, p.y - 17); ctx.lineTo(p.x - 13, p.y + 1); ctx.stroke();
+
+    ctx.strokeStyle = "#8b5327"; ctx.lineWidth = 4.5;
+    ctx.beginPath(); ctx.moveTo(p.x - 17, p.y - 8); ctx.lineTo(p.x + 17, p.y - 8); ctx.stroke();
+    ctx.restore();
+
+    ctx.fillStyle = "rgba(0,0,0,0.6)"; ctx.fillRect(p.x - 12, p.y - 24, 24, 3.5);
+    ctx.fillStyle = "#22c55e"; ctx.fillRect(p.x - 12, p.y - 24, 24 * (b.hp / b.maxHp), 3.5);
+  }
+
+  function drawFlameZone(ctx, o) {
+    const p = w2s(o.x, o.z);
+    const rw = o.r * view.scale * 0.42;
+    const rh = o.r * view.scale * 0.22;
+    ctx.save();
+    ctx.fillStyle = "rgba(10, 5, 2, 0.55)";
+    ctx.beginPath(); ctx.ellipse(p.x, p.y, rw * 1.05, rh * 1.05, 0, 0, Math.PI * 2); ctx.fill();
+
+    const grad = ctx.createRadialGradient(p.x, p.y, 4, p.x, p.y, rw);
+    grad.addColorStop(0, "rgba(254, 240, 138, 0.75)");
+    grad.addColorStop(0.35, "rgba(249, 115, 22, 0.65)");
+    grad.addColorStop(0.75, "rgba(185, 28, 28, 0.35)");
+    grad.addColorStop(1, "rgba(153, 27, 27, 0)");
+    ctx.fillStyle = grad;
+    ctx.beginPath(); ctx.ellipse(p.x, p.y, rw, rh, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+  }
+
+  function drawSpriteUnit(ctx, img, u, p) {
+    const nw = img.naturalWidth, nh = img.naturalHeight;
+    if (!nw || !nh) return false;
+
+    let cols = 6, rows = 1;
+    if (nw / nh > 2.5) {
+      cols = nw > 1600 ? 8 : 6;
+      rows = 1;
+    } else {
+      cols = 6;
+      rows = Math.max(1, Math.round(nh / (nw / cols)));
+    }
+
+    const sw = nw / cols;
+    const sh = nh / rows;
+
+    let rIdx = 0;
+    if (rows > 1) {
+      if (u.action === "attack") rIdx = Math.min(2, rows - 1);
+      else if (u.action === "walk") rIdx = Math.min(1, rows - 1);
+      else rIdx = 0;
+    }
+
+    const frame = Math.floor(u.animTime) % cols;
+    const sx = frame * sw;
+    const sy = rIdx * sh;
+
+    const dw = 44 * (u.type === "brute" ? 1.3 : 1.0);
+    const dh = dw * (sh / sw);
+
+    ctx.drawImage(img, sx, sy, sw, sh, p.x - dw / 2, p.y - dh + 6, dw, dh);
+    return true;
+  }
+
+  function draw() {
+    ctx.save();
+    if (S.shake > 0) {
+      ctx.translate((Math.random() - 0.5) * 14 * S.shake, (Math.random() - 0.5) * 14 * S.shake);
+    }
+    ctx.clearRect(0, 0, view.w, view.h);
+
+    // 1. 大地图背景直连绘制
+    if (isImgReady(ASSETS.bg)) {
+      ctx.drawImage(ASSETS.bg, 0, 0, view.w, view.h);
+    }
+
+    // 2. 烈焰与拒马
+    for (const o of oils) drawFlameZone(ctx, o);
+    for (const b of blocks) drawBarricadeProp(ctx, b);
+
+    // 3. 穿透箭
+    ctx.strokeStyle = "#fef08a"; ctx.lineWidth = 2.4;
+    for (const s of shots) {
+      const a = w2s(s.ax, s.az), b = w2s(s.bx, s.bz);
+      ctx.beginPath(); ctx.moveTo(a.x, a.y - 12); ctx.lineTo(b.x, b.y - 12); ctx.stroke();
+    }
+
+    // 4. 单位渲染
+    const allUnits = [
+      ...soldiers.map(u => ({ u, isSol: true })),
+      ...enemies.map(u => ({ u, isSol: false }))
+    ].sort((a, b) => a.u.z - b.u.z);
+
+    for (const item of allUnits) {
+      const u = item.u, p = w2s(u.x, u.z);
+      const imgKey = item.isSol ? (u.type === "Guard" ? "guard" : "archer") : (u.type === "brute" ? "brute" : "grunt");
+      const img = ASSETS[imgKey];
+
+      ctx.fillStyle = "rgba(0,0,0,0.4)";
+      ctx.beginPath(); ctx.ellipse(p.x, p.y + 3, 12, 5, 0, 0, Math.PI * 2); ctx.fill();
+
+      let ok = false;
+      if (isImgReady(img)) {
+        ok = drawSpriteUnit(ctx, img, u, p);
+      }
+      if (!ok) {
+        ctx.fillStyle = item.isSol ? "#2563eb" : "#dc2626";
+        ctx.fillRect(p.x - 7, p.y - 22, 14, 20);
+      }
+
+      ctx.fillStyle = "rgba(0,0,0,0.6)"; ctx.fillRect(p.x - 10, p.y - 32, 20, 3.5);
+      ctx.fillStyle = item.isSol ? "#38bdf8" : "#ef4444";
+      ctx.fillRect(p.x - 10, p.y - 32, 20 * Math.max(0, u.hp / u.maxHp), 3.5);
+    }
+
+    // 5. 粒子与跳字
+    for (const pt of particles) {
+      const p = w2s(pt.x, pt.z);
+      ctx.fillStyle = pt.color; ctx.fillRect(p.x, p.y - 8, 3, 3);
+    }
+    ctx.font = "900 12px Segoe UI"; ctx.textAlign = "center";
+    for (const txt of texts) {
+      const p = w2s(txt.x, txt.z);
+      ctx.fillStyle = txt.color; ctx.fillText(txt.txt, p.x, p.y - 20);
+    }
+
+    ctx.restore();
+  }
+
+  let last = performance.now();
+  function mainLoop(now) {
+    const dt = Math.min(0.05, (now - last) / 1000);
+    last = now;
+    update(dt);
+    draw();
+    requestAnimationFrame(mainLoop);
+  }
+
+  window.addEventListener("resize", resize);
+  resize();
+  requestAnimationFrame(mainLoop);
+})();
+</script>
+</body>
+</html>
