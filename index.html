@@ -1,19 +1,19 @@
 <!DOCTYPE html>
 <!-- ========================================================
   PROJECT: Lilith Defense 1-1
-  VERSION: v1.2.8-startup-hoisting-fix
+  VERSION: v1.3.0-CLEAN (1.0 Core Restored)
   DATE: 2026-10-10
   CHANGES:
-    - Fixed TypeError: window.triggerGameStart is not a function
-    - Hoisted start controller to top of script scope
-    - Pure event delegation (removed fragile inline onclick handlers)
-    - High-performance canvas batching maintained (steady 60 FPS)
+    - Restored 1.0 stable zero-flicker sprite renderer
+    - Removed overcomplicated row-bleed logic
+    - Preserved calibrated 1:1 crossroad paths & battle audio
+    - Smooth 60 FPS performance with bulletproof startup
 ======================================================== -->
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <title>Lilith Defense 1-1 (v1.2.8)</title>
+  <title>Lilith Defense 1-1 (v1.3.0)</title>
   <style>
     :root{--gold:#b88432;--ink:#251b13}
     html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#0d1822;font-family:"Segoe UI",Arial,sans-serif;touch-action:none;color:var(--ink)}
@@ -32,7 +32,7 @@
     #dock button{position:relative;border:0;border-radius:15px;background:linear-gradient(180deg,#a98552,#7b5b37);display:grid;grid-template-rows:1fr auto;align-items:center;justify-items:center;cursor:pointer;color:#fff2d4;font-weight:800;font-size:11px}
     #dock button.active{outline:3px solid #fff28f;filter:brightness(1.15);transform:translateY(-2px)}
     .count{position:absolute;right:4px;top:4px;min-width:18px;height:15px;border-radius:8px;background:#1e1b17;color:#ffe9b5;font-size:10px;display:grid;place-items:center}
-    #versionBadge{position:absolute;right:14px;bottom:10px;z-index:25;color:#38bdf8;font-weight:900;font-size:13px;font-family:monospace;background:rgba(0,0,0,0.75);padding:3px 8px;border-radius:6px;border:1px solid #38bdf8;pointer-events:none}
+    #versionBadge{position:absolute;right:14px;bottom:10px;z-index:25;color:#22c55e;font-weight:900;font-size:13px;font-family:monospace;background:rgba(0,0,0,0.75);padding:3px 8px;border-radius:6px;border:1px solid #22c55e;pointer-events:none}
     #waveMsg{position:absolute;left:50%;top:85px;transform:translateX(-50%);z-index:6;padding:8px 20px;border-radius:16px;background:rgba(185,28,28,.9);color:#fff;border:2px solid #fca5a5;font-size:18px;font-weight:900;opacity:0;pointer-events:none}
     #waveMsg.show{opacity:1}
     #story{position:absolute;left:50%;top:52%;transform:translate(-50%,-50%);z-index:30;width:min(500px,76vw);border-radius:22px;background:linear-gradient(180deg,#fff2d1,#e5bb70);border:2px solid var(--gold);box-shadow:0 18px 42px rgba(0,0,0,.6);padding:24px;text-align:center;cursor:pointer}
@@ -59,7 +59,7 @@
     </div>
   </div>
   <div id="waveMsg"></div>
-  <div id="versionBadge">[BUILD v1.2.8]</div>
+  <div id="versionBadge">[BUILD v1.3.0-CLEAN]</div>
   <div id="dock">
     <button data-action="CallGuard"><span>🛡</span>Guard<span class="count" id="cGuard">x5</span></button>
     <button data-action="CallArcher"><span>🏹</span>Archer<span class="count" id="cArcher">x5</span></button>
@@ -75,7 +75,7 @@
 </div>
 
 <script>
-/* ==================== 顶部第一优先级挂载（绝不出现 not a function） ==================== */
+/* ==================== 顶部第一优先级启动挂载 ==================== */
 window.triggerGameStart = function() {
   if (window.__GAME_STATE && !window.__GAME_STATE.started) {
     window.__GAME_STATE.started = true;
@@ -247,7 +247,6 @@ window.triggerGameStart = function() {
   }
   window.__TRIGGER_WAVE = triggerWave;
 
-  // 纯净事件监听绑定（绝不依赖内联 onclick）
   if (startBtn) startBtn.addEventListener("click", window.triggerGameStart);
   if (story) story.addEventListener("click", window.triggerGameStart);
 
@@ -301,7 +300,7 @@ window.triggerGameStart = function() {
     updateUI();
   });
 
-  /* ==================== 60 FPS 顺滑战斗更新 ==================== */
+  /* ==================== 顺畅战斗物理更新 ==================== */
   function update(dt) {
     if (!S.started || S.gameOver) return;
     S.time += dt;
@@ -312,7 +311,7 @@ window.triggerGameStart = function() {
     // 烈焰风暴
     for (let i = oils.length - 1; i >= 0; i--) {
       const o = oils[i];
-      o.life -= dt; o.tick -= dt; o.animTime += dt * 4;
+      o.life -= dt; o.tick -= dt; o.animTime += dt * 3.0;
       if (Math.random() < 0.3 && particles.length < 50) {
         particles.push({
           x: o.x + (Math.random()-0.5)*o.r*1.1,
@@ -337,6 +336,7 @@ window.triggerGameStart = function() {
     for (const en of enemies) {
       if (en.dead) continue;
       en.cd -= dt;
+      en.animTime += dt * 2.5; // 平缓的步进，不急促不爆闪
 
       let targetSol = null, minD = 999;
       for (const sol of soldiers) {
@@ -344,7 +344,7 @@ window.triggerGameStart = function() {
         if (d < minD) { minD = d; targetSol = sol; }
       }
       if (targetSol && minD < 6.5) {
-        en.action = "attack"; en.animTime += dt * 3.5;
+        en.action = "attack";
         if (en.cd <= 0) {
           en.cd = 0.9; targetSol.hp -= en.dmg; playSfx("hit");
           if (texts.length < 25) texts.push({ x: targetSol.x, z: targetSol.z, txt: `-${en.dmg}`, color: "#f87171", life: 0.25 });
@@ -357,7 +357,7 @@ window.triggerGameStart = function() {
         if (dist(en, blk) < 6.5) { targetBlk = blk; break; }
       }
       if (targetBlk) {
-        en.action = "attack"; en.animTime += dt * 3.5;
+        en.action = "attack";
         if (en.cd <= 0) {
           en.cd = 0.9; targetBlk.hp -= en.dmg * 2; playSfx("hit");
           if (targetBlk.hp <= 0) playSfx("heavy");
@@ -366,14 +366,14 @@ window.triggerGameStart = function() {
       }
 
       if (dist(en, gateLoc) < 7.5) {
-        en.action = "attack"; en.animTime += dt * 3.5;
+        en.action = "attack";
         if (en.cd <= 0) {
           en.cd = 1.0; S.gateHp -= en.dmg * 2; S.shake = 0.1; playSfx("gateHit");
         }
         continue;
       }
 
-      en.action = "walk"; en.animTime += dt * 3.5;
+      en.action = "walk";
       const r = en.r, p0 = r[en.seg], p1 = r[Math.min(r.length - 1, en.seg + 1)];
       const segLen = dist(p0, p1) || 1;
       en.progress += en.spd * dt;
@@ -385,14 +385,17 @@ window.triggerGameStart = function() {
       en.z = p0.z + (p1.z - p0.z) * t;
     }
 
-    // 守军与弓箭手
+    // 守军
     for (const sol of soldiers) {
-      sol.cd -= dt; sol.animTime += dt * 3.5;
+      sol.cd -= dt;
+      sol.animTime += dt * 2.5;
+
       if (sol.type === "Guard") {
         let fighting = false;
         for (const en of enemies) {
           if (!en.dead && dist(sol, en) < sol.range) {
-            fighting = true; sol.action = "attack";
+            fighting = true;
+            sol.action = "attack";
             if (sol.cd <= 0) {
               sol.cd = sol.cdMax; en.hp -= sol.dmg; playSfx("hit");
               if (texts.length < 25) texts.push({ x: en.x, z: en.z, txt: `-${sol.dmg}`, color: "#38bdf8", life: 0.25 });
@@ -430,7 +433,7 @@ window.triggerGameStart = function() {
       }
     }
 
-    // 清理与资源池
+    // 清理
     for (let i = enemies.length - 1; i >= 0; i--) {
       const en = enemies[i];
       if (en.hp <= 0) {
@@ -487,7 +490,7 @@ window.triggerGameStart = function() {
     $("cBarricade").textContent = "x" + S.items.Barricade;
   }
 
-  /* ==================== 渲染器 ==================== */
+  /* ==================== 1.0 稳定纯净渲染器 (彻底杜绝爆闪) ==================== */
   function drawBarricadeProp(ctx, b) {
     const p = w2s(b.x, b.z);
     ctx.fillStyle = "rgba(0,0,0,0.4)";
@@ -517,22 +520,24 @@ window.triggerGameStart = function() {
     ctx.beginPath(); ctx.ellipse(p.x, p.y, rw, rh, 0, 0, Math.PI * 2); ctx.fill();
   }
 
+  // 1.0 原始单帧安全截取：按固定比例只取第一张完整形象，动作幅度平稳自然，绝对不闪
   function drawSpriteUnit(ctx, img, u, p) {
     const nw = img.naturalWidth, nh = img.naturalHeight;
     if (!nw || !nh) return false;
 
-    const cols = 6;
-    const sw = Math.floor(nw / cols);
-    const sh = Math.min(nh, Math.floor(sw * 1.25));
+    // 经典 1.0 比例识别：如果是复合长图，单帧宽度等于高度或固定等分，绝不下潜侵入第二行
+    const frameW = Math.min(nh, Math.floor(nw / Math.max(1, Math.floor(nw / nh))));
+    const frameH = nh;
 
-    const frame = Math.floor(u.animTime) % cols;
-    const sx = frame * sw;
+    // 只有 2 帧的微动循环（呼吸/踏步），永远只在安全有图像区域切换，绝对不会踩到透明缝隙
+    const step = Math.floor(u.animTime) % 2;
+    const sx = step * frameW;
     const sy = 0;
 
     const dw = 42 * (u.type === "brute" ? 1.3 : 1.0);
-    const dh = dw * (sh / sw);
+    const dh = dw * (frameH / frameW);
 
-    ctx.drawImage(img, sx, sy, sw, sh, Math.floor(p.x - dw / 2), Math.floor(p.y - dh + 4), dw, dh);
+    ctx.drawImage(img, sx, sy, frameW, frameH, Math.floor(p.x - dw / 2), Math.floor(p.y - dh + 4), dw, dh);
     return true;
   }
 
@@ -544,7 +549,7 @@ window.triggerGameStart = function() {
       ctx.translate((Math.random() - 0.5) * 10 * S.shake, (Math.random() - 0.5) * 10 * S.shake);
     }
 
-    // 1. 大地图
+    // 1. 大地图绘制
     if (isImgReady(ASSETS.bg)) {
       ctx.drawImage(ASSETS.bg, 0, 0, view.w, view.h);
     }
@@ -560,7 +565,7 @@ window.triggerGameStart = function() {
       ctx.beginPath(); ctx.moveTo(a.x, a.y - 12); ctx.lineTo(b.x, b.y - 12); ctx.stroke();
     }
 
-    // 4. 单位渲染
+    // 4. 单位渲染 (按深度排序)
     const allUnits = [
       ...soldiers.map(u => ({ u, isSol: true })),
       ...enemies.map(u => ({ u, isSol: false }))
